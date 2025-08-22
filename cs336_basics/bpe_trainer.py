@@ -4,39 +4,12 @@ from collections import Counter
 import regex as re
 from tqdm import tqdm
 
-from .tokenizer import Tokenizer
 
-
-def run_train_bpe(
-    input_path: str,
-    vocab_size: int,
-    special_tokens: list[str],
-    **kwargs,
-) -> tuple[dict[int, bytes], list[tuple[bytes, bytes]]]:
-    """Given the path to an input corpus, run train a BPE tokenizer and
-    output its vocabulary and merges.
-    """
-    tokenizer = BPETokenizer()
-    tokenizer.train(input_path, vocab_size, special_tokens, **kwargs)
-    return tokenizer.vocab, tokenizer.merges
-
-
-class BPETokenizer(Tokenizer):
+class BPETrainer:
     """
     A BPE Tokenizer that can be trained from a text file.
     It inherits encoding and decoding functionalities from the base Tokenizer class.
     """
-
-    def __init__(
-        self,
-        vocab: dict[int, bytes] | None = None,
-        merges: list[tuple[bytes, bytes]] | None = None,
-        special_tokens: list[str] | None = None,
-    ):
-        vocab = vocab if vocab is not None else {}
-        merges = merges if merges is not None else []
-        special_tokens = special_tokens if special_tokens is not None else []
-        super().__init__(vocab, merges, special_tokens)
 
     @staticmethod
     def _flatten_and_convert_to_bytes(value):
@@ -64,7 +37,7 @@ class BPETokenizer(Tokenizer):
         else:
             # Should not be reached with correct logic, but as a fallback.
             return value
-    
+
     def train(
         self,
         input_path: str,
@@ -74,6 +47,7 @@ class BPETokenizer(Tokenizer):
     ):
         """
         Trains the BPE tokenizer from a text file.
+        return vocab and merge and class itself
         """
         with open(input_path, "rb") as f:
             input_str = f.read().decode("utf-8")
@@ -166,40 +140,18 @@ class BPETokenizer(Tokenizer):
             b2 = self._flatten_and_convert_to_bytes(p2)
             final_merges.append((b1, b2))
 
-        # Re-initialize the parent class with the trained vocab and merges
-        super().__init__(final_vocab, final_merges, special_tokens)
+        return final_vocab, final_merges
 
-    def save(self, save_dir: str, prefix: str = "bpe"):
-        """Saves the tokenizer vocabulary and merges to files."""
-        os.makedirs(save_dir, exist_ok=True)
 
-        vocab_path = os.path.join(save_dir, f"{prefix}_vocab.json")
-        merges_path = os.path.join(save_dir, f"{prefix}_merges.json")
-
-        # Save vocabulary
-        json_vocab = {k: list(v) for k, v in self.vocab.items()}
-        with open(vocab_path, "w", encoding="utf-8") as f:
-            json.dump(json_vocab, f, ensure_ascii=False)
-
-        # Save merges
-        json_merges = [[list(p1), list(p2)] for p1, p2 in self.merges]
-        with open(merges_path, "w", encoding="utf-8") as f:
-            json.dump(json_merges, f, ensure_ascii=False)
-
-    @classmethod
-    def from_files(
-        cls,
-        vocab_filepath: str,
-        merges_filepath: str,
-        special_tokens: list[str] | None = None,
-    ):
-        """Loads a tokenizer from vocabulary and merges files."""
-        with open(vocab_filepath, "r", encoding="utf-8") as f:
-            json_vocab = json.load(f)
-            vocab = {int(k): bytes(v) for k, v in json_vocab.items()}
-
-        with open(merges_filepath, "r", encoding="utf-8") as f:
-            json_merges = json.load(f)
-            merges = [(bytes(p1), bytes(p2)) for p1, p2 in json_merges]
-
-        return cls(vocab, merges, special_tokens)
+def run_train_bpe(
+    input_path: str,
+    vocab_size: int,
+    special_tokens: list[str],
+    **kwargs,
+) -> tuple[dict[int, bytes], list[tuple[bytes, bytes]], BPETrainer]:
+    """Given the path to an input corpus, run train a BPE tokenizer and
+    output its vocabulary and merges.
+    """
+    trainer = BPETrainer()
+    vocab, merges = trainer.train(input_path, vocab_size, special_tokens, **kwargs)
+    return vocab, merges, trainer
