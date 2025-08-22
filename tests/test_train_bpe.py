@@ -23,16 +23,59 @@ def test_train_bpe_speed():
     end_time = time.time()
     assert end_time - start_time < 1.5
 
+
 def test_train_bpe_save():
     """
+    Test that the BPE trainer can save vocab and merges in GPT-2 format
+    and that the saved files match the reference files.
     """
     input_path = FIXTURES_PATH / "corpus.en"
-    start_time = time.time()
-    _, _, tokenizer = run_train_bpe(
+    vocab, merges, _ = run_train_bpe(
         input_path=input_path,
         vocab_size=500,
         special_tokens=["<|endoftext|>"],
     )
+
+    # Import the BPETrainer to use the save method
+    from cs336_basics.bpe_trainer import BPETrainer
+
+    # Save the trained bpe to temporary files
+    import tempfile
+    import os
+
+    save_path = FIXTURES_PATH / "train-bpe-result"
+    BPETrainer.save(vocab, merges, save_path)
+
+    # Load the saved files
+    saved_vocab_path = f"{save_path}-vocab.json"
+    saved_merges_path = f"{save_path}-merges.txt"
+
+    with open(saved_vocab_path, "r", encoding="utf-8") as f:
+        saved_vocab = json.load(f)
+
+    with open(saved_merges_path, "r", encoding="utf-8") as f:
+        saved_merges = f.read().strip().split("\n")
+
+    # Load the reference files
+    reference_vocab_path = FIXTURES_PATH / "train-bpe-reference-vocab.json"
+    reference_merges_path = FIXTURES_PATH / "train-bpe-reference-merges.txt"
+
+    with open(reference_vocab_path, "r", encoding="utf-8") as f:
+        reference_vocab = json.load(f)
+
+    with open(reference_merges_path, "r", encoding="utf-8") as f:
+        reference_merges = f.read().strip().split("\n")
+
+    # Compare the vocabularies
+    assert (
+        saved_vocab.keys() == reference_vocab.keys()
+    ), "Saved vocabulary doesn't match reference vocabulary"
+
+    # Compare the merges
+    assert saved_merges == reference_merges, "Saved merges don't match reference merges"
+
+    print("✓ Save method works correctly - files match reference files!")
+
 
 def test_train_bpe():
     input_path = FIXTURES_PATH / "corpus.en"
@@ -63,7 +106,9 @@ def test_train_bpe():
     with open(reference_vocab_path, encoding="utf-8") as f:
         gpt2_reference_vocab = json.load(f)
         reference_vocab = {
-            gpt2_vocab_index: bytes([gpt2_byte_decoder[token] for token in gpt2_vocab_item])
+            gpt2_vocab_index: bytes(
+                [gpt2_byte_decoder[token] for token in gpt2_vocab_item]
+            )
             for gpt2_vocab_item, gpt2_vocab_index in gpt2_reference_vocab.items()
         }
     # Rather than checking that the vocabs exactly match (since they could
@@ -85,7 +130,9 @@ def test_train_bpe_special_tokens(snapshot):
     )
 
     # Check that the special token is not in the vocab
-    vocabs_without_specials = [word for word in vocab.values() if word != b"<|endoftext|>"]
+    vocabs_without_specials = [
+        word for word in vocab.values() if word != b"<|endoftext|>"
+    ]
     for word_bytes in vocabs_without_specials:
         assert b"<|" not in word_bytes
 

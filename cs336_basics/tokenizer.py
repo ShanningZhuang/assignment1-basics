@@ -1,7 +1,6 @@
 from heapq import merge
 from typing import Any
 import regex as re
-from .common import gpt2_bytes_to_unicode
 import json
 
 

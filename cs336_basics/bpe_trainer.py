@@ -3,6 +3,7 @@ import json
 from collections import Counter
 import regex as re
 from tqdm import tqdm
+from .common import gpt2_bytes_to_unicode
 
 
 class BPETrainer:
@@ -140,7 +141,43 @@ class BPETrainer:
             b2 = self._flatten_and_convert_to_bytes(p2)
             final_merges.append((b1, b2))
 
+        self.final_vocab = final_vocab
+        self.final_merges = final_merges
         return final_vocab, final_merges
+
+    @staticmethod
+    def save(vocab, merges, path_to_save):
+        """Given the vocab and merges, save them into proper format like GPT2
+
+        Args:
+            vocab (dict[int, bytes]): The vocabulary mapping from token ID to token bytes
+            merges (list[tuple[bytes, bytes]]): The BPE merges as pairs of bytes
+            path_to_save (str): The base path to save the files (without extension)
+                Will create two files: {path_to_save}.json and {path_to_save}.txt
+        """
+        # Get the byte-to-unicode mapping for GPT-2 format
+        bytes_to_unicode = gpt2_bytes_to_unicode()
+
+        # Convert vocab to GPT-2 format (string tokens -> token IDs)
+        gpt2_vocab = {}
+        for token_id, token_bytes in vocab.items():
+            # Convert bytes to GPT-2 string representation
+            token_str = "".join(bytes_to_unicode[b] for b in token_bytes)
+            gpt2_vocab[token_str] = token_id
+
+        # Save vocab as JSON file
+        vocab_path = f"{path_to_save}-vocab.json"
+        with open(vocab_path, "w", encoding="utf-8") as f:
+            json.dump(gpt2_vocab, f, ensure_ascii=False)
+
+        # Convert merges to GPT-2 format and save as text file
+        merges_path = f"{path_to_save}-merges.txt"
+        with open(merges_path, "w", encoding="utf-8") as f:
+            for token1_bytes, token2_bytes in merges:
+                # Convert both tokens to GPT-2 string representation
+                token1_str = "".join(bytes_to_unicode[b] for b in token1_bytes)
+                token2_str = "".join(bytes_to_unicode[b] for b in token2_bytes)
+                f.write(f"{token1_str} {token2_str}\n")
 
 
 def run_train_bpe(
