@@ -1,10 +1,14 @@
+import cProfile
+import pstats
 import json
 import time
 from cs336_basics.bpe_trainer import run_train_bpe
 
 
 def train_bpe(input_path):
-    start_time = time.time()
+    # --- Profiling starts here ---
+    profiler = cProfile.Profile()
+    profiler.enable()
     _, _ = run_train_bpe(
         input_path=input_path,
         vocab_size=10000,

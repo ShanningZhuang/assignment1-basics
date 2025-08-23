@@ -24,6 +24,39 @@ def test_train_bpe_speed():
     assert end_time - start_time < 1.5
 
 
+def test_train_bpe_profile():
+    """
+    Ensure that BPE training is relatively efficient by measuring training
+    time on this small dataset and throwing an error if it takes more than 1.5 seconds.
+    This is a pretty generous upper-bound, it takes 0.38 seconds with the
+    reference implementation on my laptop. In contrast, the toy implementation
+    takes around 3 seconds.
+    """
+    import cProfile
+    import pstats
+
+    input_path = FIXTURES_PATH / "corpus.en"
+
+    # --- Profiling starts here ---
+    profiler = cProfile.Profile()
+    profiler.enable()
+
+    try:
+        _, _, _ = run_train_bpe(
+            input_path=input_path,
+            vocab_size=500,
+            special_tokens=["<|endoftext|>"],
+        )
+    finally:
+        profiler.disable()
+        # --- Profiling ends here ---
+
+        # Print the profiling stats
+        print("BPE Training Profile Results:")
+        stats = pstats.Stats(profiler).sort_stats("cumtime")
+        stats.print_stats(20)  # Print the top 20 time-consuming functions
+
+
 def test_train_bpe_save():
     """
     Test that the BPE trainer can save vocab and merges in GPT-2 format
