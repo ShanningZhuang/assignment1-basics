@@ -9,14 +9,22 @@ def train_bpe(input_path):
     # --- Profiling starts here ---
     profiler = cProfile.Profile()
     profiler.enable()
-    _, _ = run_train_bpe(
-        input_path=input_path,
-        vocab_size=10000,
-        special_tokens=["<|endoftext|>"],
-    )
-    end_time = time.time()
-    print(start_time - end_time)
+    try:
+        vocab, merges, trainer = run_train_bpe(
+            input_path=input_path,
+            vocab_size=10000,
+            special_tokens=["<|endoftext|>"],
+        )
+        trainer.save(vocab, merges, input_path.split(".")[0])
+    finally:
+        profiler.disable()
+        # --- Profiling ends here ---
+
+        # Print the profiling stats
+        print("BPE Training Profile Results:")
+        stats = pstats.Stats(profiler).sort_stats("cumtime")
+        stats.print_stats(20)  # Print the top 20 time-consuming functions
 
 
 if __name__ == "__main__":
-    train_bpe("data/TinyStoriesV2-GPT4-train.txt")
+    train_bpe("data/owt_train.txt")
