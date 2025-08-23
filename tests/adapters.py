@@ -595,4 +595,4 @@ def run_train_bpe(
     """
     from cs336_basics.bpe_trainer import run_train_bpe
 
-    return run_train_bpe(input_path, vocab_size, special_tokens)
+    return run_train_bpe(input_path, vocab_size, special_tokens, **kwargs)

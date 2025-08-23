@@ -3,7 +3,96 @@ import json
 from collections import Counter, defaultdict
 import regex as re
 from tqdm import tqdm
+from multiprocessing import Pool, cpu_count
+from functools import partial
 from .common import gpt2_bytes_to_unicode
+
+
+def pretokenize_chunk(args):
+    """
+    Worker function for multiprocessing pretokenization.
+
+    Args:
+        args: Tuple containing (input_path, start, end, special_tokens_pattern, PAT)
+
+    Returns:
+        Counter: pretoken counts for this chunk
+    """
+    input_path, start, end, special_tokens_pattern, PAT = args
+
+    # Read the chunk from file
+    with open(input_path, "rb") as f:
+        f.seek(start)
+        chunk_bytes = f.read(end - start)
+        chunk_str = chunk_bytes.decode("utf-8", errors="ignore")
+
+    # Handle special tokens if present
+    if special_tokens_pattern:
+        chunks = re.split(f"({special_tokens_pattern})", chunk_str)
+        text_chunks = [
+            chunk for chunk in chunks if not re.match(special_tokens_pattern, chunk)
+        ]
+    else:
+        text_chunks = [chunk_str]
+
+    # Pretokenize each text chunk
+    pretoken_counts = Counter()
+    for text_chunk in text_chunks:
+        if text_chunk.strip():
+            pretokens = re.findall(PAT, text_chunk)
+            pretoken_counts.update(pretokens)
+
+    return pretoken_counts
+
+
+def find_chunk_boundaries(
+    file_path: str,
+    desired_num_chunks: int,
+    split_special_token: bytes,
+) -> list[int]:
+    """
+    Chunk the file into parts that can be counted independently.
+    May return fewer chunks if the boundaries end up overlapping.
+    """
+    assert isinstance(
+        split_special_token, bytes
+    ), "Must represent special token as a bytestring"
+
+    with open(file_path, "rb") as file:
+        # Get total file size in bytes
+        file.seek(0, os.SEEK_END)
+        file_size = file.tell()
+        file.seek(0)
+
+        chunk_size = file_size // desired_num_chunks
+
+        # Initial guesses for chunk boundary locations, uniformly spaced
+        # Chunks start on previous index, don't include last index
+        chunk_boundaries = [i * chunk_size for i in range(desired_num_chunks + 1)]
+        chunk_boundaries[-1] = file_size
+
+        mini_chunk_size = 4096  # Read ahead by 4k bytes at a time
+
+        for bi in range(1, len(chunk_boundaries) - 1):
+            initial_position = chunk_boundaries[bi]
+            file.seek(initial_position)  # Start at boundary guess
+            while True:
+                mini_chunk = file.read(mini_chunk_size)  # Read a mini chunk
+
+                # If EOF, this boundary should be at the end of the file
+                if mini_chunk == b"":
+                    chunk_boundaries[bi] = file_size
+                    break
+
+                # Find the special token in the mini chunk
+                found_at = mini_chunk.find(split_special_token)
+                if found_at != -1:
+                    chunk_boundaries[bi] = initial_position + found_at
+                    break
+                initial_position += mini_chunk_size
+
+        # Make sure all boundaries are unique, but might be fewer than desired_num_chunks
+        return sorted(set(chunk_boundaries))
 
 
 class BPETrainer:
@@ -38,29 +127,6 @@ class BPETrainer:
         else:
             # Should not be reached with correct logic, but as a fallback.
             return value
-
-    def train_parallel(
-        self,
-        input_path: str,
-        vocab_size: int,
-        special_tokens: list[str],
-        num_workers: int,
-        **kwargs,
-    ):
-        """
-        Trains the BPE tokenizer from a text file.
-        return vocab and merge
-        """
-        with open(input_path, "rb") as f:
-            input_str = f.read().decode("utf-8")
-
-        # 1. Vocabulary Initialization
-        vocab = {i: bytes([i]) for i in range(256)}
-        for special_token in special_tokens:
-            vocab[len(vocab)] = special_token.encode("utf-8")
-        merges = []
-
-        pass
 
     @staticmethod
     def save(vocab, merges, path_to_save):
@@ -101,15 +167,13 @@ class BPETrainer:
         input_path: str,
         vocab_size: int,
         special_tokens: list[str],
+        num_workers=1,
         **kwargs,
     ):
         """
         Trains the BPE tokenizer from a text file.
         return vocab and merge
         """
-        with open(input_path, "rb") as f:
-            input_str = f.read().decode("utf-8")
-
         # 1. Vocabulary Initialization
         vocab = {i: bytes([i]) for i in range(256)}
         for special_token in special_tokens:
@@ -123,19 +187,50 @@ class BPETrainer:
             else None
         )
 
-        if special_tokens_pattern:
-            chunks = re.split(f"({special_tokens_pattern})", input_str)
-            text_chunks = [chunk for chunk in chunks if chunk not in special_tokens]
-        else:
-            text_chunks = [input_str]
-
         PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
-        pretoken_counts = Counter()
 
-        for chunk in text_chunks:
-            if chunk.strip():
-                pretokens = re.findall(PAT, chunk)
-                pretoken_counts.update(pretokens)
+        # Use multiprocessing for pretokenization if num_workers > 1
+        if num_workers > 1:
+            # Find chunk boundaries based on special tokens
+            split_token = special_tokens[0].encode("utf-8") if special_tokens else b"\n"
+            boundaries = find_chunk_boundaries(input_path, num_workers, split_token)
+
+            # Prepare arguments for worker processes
+            chunk_args = []
+            for start, end in zip(boundaries[:-1], boundaries[1:]):
+                chunk_args.append((input_path, start, end, special_tokens_pattern, PAT))
+
+            # Process chunks in parallel
+            print(f"Processing {len(chunk_args)} chunks with {num_workers} workers...")
+            with Pool(num_workers) as pool:
+                chunk_results = list(
+                    tqdm(
+                        pool.imap(pretokenize_chunk, chunk_args),
+                        total=len(chunk_args),
+                        desc="Pretokenizing chunks",
+                    )
+                )
+
+            # Combine results from all chunks
+            pretoken_counts = Counter()
+            for chunk_counter in chunk_results:
+                pretoken_counts.update(chunk_counter)
+        else:
+            # Single-threaded processing (original implementation)
+            with open(input_path, "rb") as f:
+                input_str = f.read().decode("utf-8")
+
+            if special_tokens_pattern:
+                chunks = re.split(f"({special_tokens_pattern})", input_str)
+                text_chunks = [chunk for chunk in chunks if chunk not in special_tokens]
+            else:
+                text_chunks = [input_str]
+
+            pretoken_counts = Counter()
+            for chunk in text_chunks:
+                if chunk.strip():
+                    pretokens = re.findall(PAT, chunk)
+                    pretoken_counts.update(pretokens)
 
         byte_pretoken_counts = {}
         for pretoken, count in pretoken_counts.items():

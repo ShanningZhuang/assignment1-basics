@@ -12,8 +12,9 @@ def train_bpe(input_path):
     try:
         vocab, merges, trainer = run_train_bpe(
             input_path=input_path,
-            vocab_size=10000,
+            vocab_size=32000,
             special_tokens=["<|endoftext|>"],
+            num_workers=64,
         )
         trainer.save(vocab, merges, input_path.split(".")[0])
     finally:

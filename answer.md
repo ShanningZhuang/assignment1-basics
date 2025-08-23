@@ -1,3 +1,4 @@
+## Problem 2
 Problem (unicode1):
 
 1) Null
@@ -37,7 +38,7 @@ Problem (BPE Training on TinyStories):
 
 (a)
 
-Memory about 10GB? 5minutes. Make sense? Main overhead is while pretokenization. Merge is actually fast afte optimization.
+Memory about 5GB? 5minutes 1 process and 1min in 16 process. Make sense? Main overhead is while pretokenization. Merge is actually fast afte optimization.
 
 (b)
 BPE Training Profile Results:
@@ -67,6 +68,36 @@ BPE Training Profile Results:
         1    4.769    4.769    4.769    4.769 {method 'decode' of 'bytes' objects}
   5435141    2.769    0.000    4.688    0.000 /home/zsn/miniconda3/lib/python3.12/enum.py:726(__call__)
   2717700    3.202    0.000    3.202    0.000 {method 'strip' of 'str' objects}
+
+16 core
+
+BPE Training Profile Results:
+         8954258 function calls (8870701 primitive calls) in 67.941 seconds
+
+   Ordered by: cumulative time
+   List reduced from 507 to 20 due to restriction <20>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+    11/10    4.934    0.449   97.830    9.783 /home/zsn/.local/share/uv/python/cpython-3.13.7-linux-x86_64-gnu/lib/python3.13/threading.py:641(wait)
+     11/7    0.000    0.000   60.027    8.575 /home/zsn/.local/share/uv/python/cpython-3.13.7-linux-x86_64-gnu/lib/python3.13/threading.py:327(wait)
+    51/30   31.132    0.610   50.020    1.667 {method 'acquire' of '_thread.lock' objects}
+    38/34    0.000    0.000   34.551    1.016 /home/zsn/.local/share/uv/python/cpython-3.13.7-linux-x86_64-gnu/lib/python3.13/multiprocessing/connection.py:390(_recv)
+    38/34    6.793    0.179   34.550    1.016 {built-in method posix.read}
+       17    0.000    0.000   27.827    1.637 /home/zsn/.local/share/uv/python/cpython-3.13.7-linux-x86_64-gnu/lib/python3.13/multiprocessing/connection.py:246(recv)
+       17    0.000    0.000   27.788    1.635 /home/zsn/.local/share/uv/python/cpython-3.13.7-linux-x86_64-gnu/lib/python3.13/multiprocessing/util.py:272(__call__)
+        1    0.000    0.000   27.787   27.787 /home/zsn/.local/share/uv/python/cpython-3.13.7-linux-x86_64-gnu/lib/python3.13/multiprocessing/pool.py:738(__exit__)
+        1    0.000    0.000   27.787   27.787 /home/zsn/.local/share/uv/python/cpython-3.13.7-linux-x86_64-gnu/lib/python3.13/multiprocessing/pool.py:654(terminate)
+        1    0.000    0.000   27.787   27.787 /home/zsn/.local/share/uv/python/cpython-3.13.7-linux-x86_64-gnu/lib/python3.13/multiprocessing/pool.py:680(_terminate_pool)
+      388    0.002    0.000   27.760    0.072 {method 'acquire' of '_multiprocessing.SemLock' objects}
+        1    0.000    0.000   27.759   27.759 /home/zsn/.local/share/uv/python/cpython-3.13.7-linux-x86_64-gnu/lib/python3.13/multiprocessing/pool.py:671(_help_stuff_finish)
+    19/17    0.000    0.000   27.759    1.633 /home/zsn/.local/share/uv/python/cpython-3.13.7-linux-x86_64-gnu/lib/python3.13/multiprocessing/connection.py:429(_recv_bytes)
+      3/1    0.000    0.000   27.758   27.758 /home/zsn/.local/share/uv/python/cpython-3.13.7-linux-x86_64-gnu/lib/python3.13/threading.py:983(run)
+        1    0.000    0.000   27.758   27.758 /home/zsn/.local/share/uv/python/cpython-3.13.7-linux-x86_64-gnu/lib/python3.13/multiprocessing/pool.py:573(_handle_results)
+        1    0.000    0.000   27.757   27.757 /home/zsn/.local/share/uv/python/cpython-3.13.7-linux-x86_64-gnu/lib/python3.13/multiprocessing/pool.py:527(_handle_tasks)
+       21    0.000    0.000   27.682    1.318 /home/zsn/.local/share/uv/python/cpython-3.13.7-linux-x86_64-gnu/lib/python3.13/multiprocessing/pool.py:500(_wait_for_updates)
+     9743    0.026    0.000   18.002    0.002 /home/zsn/.local/share/uv/python/cpython-3.13.7-linux-x86_64-gnu/lib/python3.13/collections/__init__.py:622(most_common)
+     9743    0.016    0.000   17.973    0.002 /home/zsn/.local/share/uv/python/cpython-3.13.7-linux-x86_64-gnu/lib/python3.13/heapq.py:523(nlargest)
+    13105   17.959    0.001   17.959    0.001 {built-in method builtins.max}
 
 Based on the profiling results you've shared, here's an analysis of the most time-consuming parts of your BPE tokenizer training process:
 
@@ -105,3 +136,6 @@ TinyStories分词器（10K词表）压缩率约为3.2字节/词元，OpenWebText
 
 (d) uint16存储依据
 因TinyStories词表(10,000)和OpenWebText词表(32,768)均小于65,536（2¹⁶），uint16可无溢出存储所有词元ID，且比uint32节约50%存储空间，加速数据加载。
+
+## Problem 3
+
