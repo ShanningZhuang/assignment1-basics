@@ -228,3 +228,40 @@ FUNCTION decode(token_ids, vocab):
 
 END FUNCTION
 ```
+
+# Transformer
+
+```mermaid
+flowchart TD
+
+A[Input Tokens / Text Sequence] -->|Tokenization| B[Token IDs / Integers]
+B -->|Embedding Lookup| C[Token Embeddings / Float Vectors]
+C -->|+ Positional Encoding| D[Input Representation]
+
+subgraph Encoder
+  D --> E[Multi-Head Self-Attention]
+  E --> F[Add & Norm]
+  F --> G[Feed Forward Network]
+  G --> H[Add & Norm]
+end
+
+H --> I[Encoder Output / Contextual Representations]
+
+subgraph Decoder
+  J[Previous Output Tokens / Shifted Right] -->|Tokenization + Embedding| K[Decoder Input Embeddings]
+  K --> L[Masked Multi-Head Self-Attention]
+  L --> M[Add & Norm]
+  M --> N[Encoder-Decoder Attention]
+  I --> N
+  N --> O[Add & Norm]
+  O --> P[Feed Forward Network]
+  P --> Q[Add & Norm]
+end
+
+Q --> R[Decoder Output / Contextual Representations]
+
+R --> S[Linear Layer + Softmax / Probabilities]
+S --> T[Predicted Next Token]
+
+
+```

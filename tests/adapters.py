@@ -28,8 +28,18 @@ def run_linear(
     Returns:
         Float[Tensor, "... d_out"]: The transformed output of your linear module.
     """
+    # Import the Linear class from cs336_basics
+    from cs336_basics.Linear import Linear
 
-    raise NotImplementedError
+    # Create a Linear module with the given dimensions
+    linear = Linear(in_features=d_in, out_features=d_out)
+
+    # Load the provided weights into the module
+    # The weights should have shape (d_out, d_in) which matches our Linear.weight parameter
+    linear.load_state_dict({"weight": weights})
+
+    # Apply the linear transformation
+    return linear(in_features)
 
 
 def run_embedding(
@@ -51,7 +61,13 @@ def run_embedding(
         Float[Tensor, "... d_model"]: Batch of embeddings returned by your Embedding layer.
     """
 
-    raise NotImplementedError
+    from cs336_basics.Embedding import Embedding
+
+    embedding = Embedding(num_embeddings=vocab_size, embedding_dim=d_model)
+
+    embedding.load_state_dict({"embedding": weights})
+
+    return embedding(token_ids)
 
 
 def run_swiglu(
@@ -83,7 +99,13 @@ def run_swiglu(
     # swiglu.w1.weight.data = w1_weight
     # swiglu.w2.weight.data = w2_weight
     # swiglu.w3.weight.data = w3_weight
-    raise NotImplementedError
+    from cs336_basics.PositionwiseFeedForward import PositionwiseFeedForward
+
+    positionwise_feedforward = PositionwiseFeedForward(d_model, d_ff)
+    positionwise_feedforward.w1.weight.data = w1_weight
+    positionwise_feedforward.w2.weight.data = w2_weight
+    positionwise_feedforward.w3.weight.data = w3_weight
+    return positionwise_feedforward(in_features)
 
 
 def run_scaled_dot_product_attention(
@@ -200,7 +222,10 @@ def run_rope(
     Returns:
         Float[Tensor, " ... sequence_length d_k"]: Tensor with RoPEd input.
     """
-    raise NotImplementedError
+    from cs336_basics.RotaryPositionalEmbedding import RotaryPositionalEmbedding
+
+    rope = RotaryPositionalEmbedding(theta, d_k, max_seq_len)
+    return rope(in_query_or_key, token_positions)
 
 
 def run_transformer_block(
@@ -378,7 +403,11 @@ def run_rmsnorm(
         Float[Tensor,"... d_model"]: Tensor of with the same shape as `in_features` with the output of running
         RMSNorm of the `in_features`.
     """
-    raise NotImplementedError
+    from cs336_basics.RMSNorm import RMSNorm
+
+    rmsnorm = RMSNorm(d_model, eps)
+    rmsnorm.load_state_dict({"gain": weights})
+    return rmsnorm(in_features)
 
 
 def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
