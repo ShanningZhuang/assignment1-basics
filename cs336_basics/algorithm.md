@@ -265,3 +265,62 @@ S --> T[Predicted Next Token]
 
 
 ```
+
+Got it 👍 — you want a **Transformer pipeline** that clearly shows the **flow of tensors** with **dimensions (shapes) pinned at each step**, including both encoder and decoder.
+
+Let’s assume a standard setup:
+
+* Sequence length = **L** (encoder input), **T** (decoder input, shifted right)
+* Vocabulary size = **V**
+* Embedding / hidden dimension = **d\_model**
+* Number of heads = **h**, per-head dimension = **d\_k = d\_model / h**
+* Feed-forward hidden dimension = **d\_ff**
+
+---
+
+# 🔹 Transformer Pipeline with Dimensions
+
+## **Encoder Side**
+
+| Step                 | Operation                                   | Input → Output (Shape)                                                               |
+| -------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------ |
+| **1**                | Input Tokens                                | `(L,)` (sequence of token IDs)                                                       |
+| **2**                | Embedding Lookup                            | `(L,) → (L, d_model)`                                                                |
+| **3**                | + Positional Encoding                       | `(L, d_model)` (same shape, enriched with position info)                             |
+| **4**                | Multi-Head Self-Attention                   | Query/Key/Value: `(L, d_model) → (h, L, d_k)` each → Attention Output `(L, d_model)` |
+| **5**                | Add & Norm                                  | `(L, d_model)`                                                                       |
+| **6**                | Feed-Forward Network (2-layer MLP)          | `(L, d_model) → (L, d_ff) → (L, d_model)`                                            |
+| **7**                | Add & Norm                                  | `(L, d_model)`                                                                       |
+| **→ Encoder Output** | `(L, d_model)` (Contextual Representations) |                                                                                      |
+
+---
+
+## **Decoder Side**
+
+| Step                 | Operation                              | Input → Output (Shape)                                                       |
+| -------------------- | -------------------------------------- | ---------------------------------------------------------------------------- |
+| **1**                | Previous Output Tokens (shifted right) | `(T,)`                                                                       |
+| **2**                | Embedding Lookup + Positional Encoding | `(T,) → (T, d_model)`                                                        |
+| **3**                | Masked Multi-Head Self-Attention       | `(T, d_model) → (T, d_model)` (causal mask applied)                          |
+| **4**                | Add & Norm                             | `(T, d_model)`                                                               |
+| **5**                | Encoder-Decoder Attention              | Query `(T, d_model)`, Key/Value from encoder `(L, d_model)` → `(T, d_model)` |
+| **6**                | Add & Norm                             | `(T, d_model)`                                                               |
+| **7**                | Feed-Forward Network                   | `(T, d_model) → (T, d_ff) → (T, d_model)`                                    |
+| **8**                | Add & Norm                             | `(T, d_model)`                                                               |
+| **→ Decoder Output** | `(T, d_model)`                         |                                                                              |
+
+---
+
+## **Final Projection**
+
+| Step                         | Operation                                | Shape |
+| ---------------------------- | ---------------------------------------- | ----- |
+| Linear (projection to vocab) | `(T, d_model) → (T, V)`                  |       |
+| Softmax                      | `(T, V)` (probabilities over vocabulary) |       |
+| Argmax / Sampling            | `(T,)` (predicted next tokens)           |       |
+
+---
+
+👉 This table is the **canonical transformer pipeline** with **tensor shapes pinned**.
+
+Would you like me to also **draw this as a flowchart with dimensions included** (so you can see arrows with `(L, d_model)` etc.), or keep it in this structured table format?

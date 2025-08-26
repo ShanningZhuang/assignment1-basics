@@ -125,17 +125,253 @@ This process is repeated for every single merge operation, and the combination o
 
 To improve performance, you might consider optimizing the way pairs are found and counted, perhaps by reducing the reliance on repeated, full-corpus regex scans in every iteration.
 
-(a) 压缩率结果
-TinyStories分词器（10K词表）压缩率约为3.2字节/词元，OpenWebText分词器（32K词表）压缩率约为2.8字节/词元。更大词表通过更长词元降低总词元数，从而提升压缩效率。
+Problem (BPE Training on OpenWebText):
+(a)
+Processing 64 chunks with 64 workers...
+Pretokenizing chunks: 100%|███████████████████████████████████████████████████████████████████████████████| 64/64 [00:52<00:00,  1.22it/s]
+Training BPE: 100%|███████████████████████████████████████████████████████████████████████████████| 31743/31743 [3:36:56<00:00,  2.44it/s]
+BPE Training Profile Results:
+         1228501716 function calls (1228211482 primitive calls) in 13320.098 seconds
 
-(b) 跨语料库分词影响
-使用TinyStories分词器处理OpenWebText样本时，压缩率劣化至4.1字节/词元（较原OpenWebText分词器上升46%），因专业术语和复杂结构被拆解为更多子词元，显著增加词元数量。
+   Ordered by: cumulative time
+   List reduced from 507 to 20 due to restriction <20>
 
-(c) 吞吐量与处理时间
-在标准CPU上实测分词器吞吐量为85MB/s，处理825GB的Pile数据集需 2.7小时（计算式：825×1024²÷85÷3600≈2.7）。
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+1317/1316 2849.201    2.163 32293.293   24.539 /home/zsn/.local/share/uv/python/cpython-3.13.7-linux-x86_64-gnu/lib/python3.13/threading.py:641(wait)
+1320/1311   19.988    0.015 13429.772   10.244 /home/zsn/.local/share/uv/python/cpython-3.13.7-linux-x86_64-gnu/lib/python3.13/threading.py:327(wait)
+5285/5242 3949.937    0.747 7735.192    1.476 {method 'acquire' of '_thread.lock' objects}
+   100597 5586.370    0.056 5586.370    0.056 {built-in method builtins.max}
+    31743    0.385    0.000 5465.899    0.172 /home/zsn/.local/share/uv/python/cpython-3.13.7-linux-x86_64-gnu/lib/python3.13/collections/__init__.py:622(most_common)
+    31743    0.208    0.000 5465.498    0.172 /home/zsn/.local/share/uv/python/cpython-3.13.7-linux-x86_64-gnu/lib/python3.13/heapq.py:523(nlargest)
+288193630  474.118    0.000  474.121    0.000 {method 'add' of 'set' objects}
+ 58907795  179.381    0.000  179.381    0.000 {method 'discard' of 'set' objects}
+ 57194190   56.581    0.000  121.013    0.000 /home/zsn/.local/share/uv/python/cpython-3.13.7-linux-x86_64-gnu/lib/python3.13/collections/__init__.py:673(update)
+      452    0.006    0.000   88.586    0.196 /home/zsn/.local/share/uv/python/cpython-3.13.7-linux-x86_64-gnu/lib/python3.13/multiprocessing/pool.py:500(_wait_for_updates)
+     1320   37.196    0.028   71.306    0.054 /home/zsn/course/CS336/assignments/assignment1-basics/.venv/lib/python3.13/site-packages/tqdm/std.py:110(__enter__)
+  134/130    0.001    0.000   64.495    0.496 /home/zsn/.local/share/uv/python/cpython-3.13.7-linux-x86_64-gnu/lib/python3.13/multiprocessing/connection.py:390(_recv)
+  134/130   11.918    0.089   64.414    0.495 {built-in method posix.read}
+       65    0.001    0.000   55.208    0.849 /home/zsn/.local/share/uv/python/cpython-3.13.7-linux-x86_64-gnu/lib/python3.13/multiprocessing/connection.py:246(recv)
+    31584    0.068    0.000   53.839    0.002 {method 'acquire' of '_multiprocessing.SemLock' objects}
+       65    0.000    0.000   52.810    0.812 /home/zsn/.local/share/uv/python/cpython-3.13.7-linux-x86_64-gnu/lib/python3.13/multiprocessing/util.py:272(__call__)
+        1    0.000    0.000   52.810   52.810 /home/zsn/.local/share/uv/python/cpython-3.13.7-linux-x86_64-gnu/lib/python3.13/multiprocessing/pool.py:738(__exit__)
+        1    0.000    0.000   52.810   52.810 /home/zsn/.local/share/uv/python/cpython-3.13.7-linux-x86_64-gnu/lib/python3.13/multiprocessing/pool.py:654(terminate)
+        1    0.000    0.000   52.810   52.810 /home/zsn/.local/share/uv/python/cpython-3.13.7-linux-x86_64-gnu/lib/python3.13/multiprocessing/pool.py:680(_terminate_pool)
+    67/65    0.005    0.000   52.591    0.809 /home/zsn/.local/share/uv/python/cpython-3.13.7-linux-x86_64-gnu/lib/python3.13/multiprocessing/connection.py:429(_recv_bytes)
 
-(d) uint16存储依据
-因TinyStories词表(10,000)和OpenWebText词表(32,768)均小于65,536（2¹⁶），uint16可无溢出存储所有词元ID，且比uint32节约50%存储空间，加速数据加载。
+(b)
+
+OpenWebText has more professional words than TinyStories
+
+Problem(Experiments with tokenizers):
+(a)
+
+--- Part (a): Compression Ratio ---
+TinyStories tokenizer compression ratio: 4.11 bytes/token
+OpenWebText tokenizer compression ratio: 4.69 bytes/token
+Response: The TinyStories tokenizer has a compression ratio of around 3.3-3.4 bytes/token, while the OpenWebText tokenizer achieves a ratio of about 4.0-4.1 bytes/token on their respective datasets.
+
+--- Part (b): Cross-Tokenization ---
+OpenWebText sample with TinyStories tokenizer compression ratio: 3.19 bytes/token
+Response: When tokenizing OpenWebText with the TinyStories tokenizer, the compression ratio degrades significantly because the tokenizer frequently breaks down unknown words into individual byte tokens, increasing the total number of tokens.
+
+--- Part (c): Tokenizer Throughput ---
+OpenWebText tokenizer throughput: 0.65 MB/s
+Estimated time to tokenize The Pile (825GB): 354.90 hours
+Response: The tokenizer's throughput is approximately X MB/s, which would mean tokenizing the 825GB Pile dataset would take roughly Y hours.
+
+--- Part (d): Dataset Encoding and uint16 ---
+Why is uint16 an appropriate choice for storing token IDs?
+The TinyStories vocabulary size is ~10K and OpenWebText is 32K. A uint16 can store integers from 0 to 65,535. This range is sufficient to represent all token IDs for both vocabularies. Using uint16 is memory-efficient compared to larger types like uint32, saving significant disk space and potentially speeding up data loading during model training.
 
 ## Problem 3
 
+### Problem (transformer_accounting):Transformer LM resource accounting
+(a) Consider GPT-2 XL, which has the following configuration:
+vocab_size : 50,257
+context_length : 1,024
+num_layers : 48
+d_model : 1,600
+num_heads : 25
+d_ff : 6,400
+Suppose we constructed our model using this configuration. How many trainable parameters
+would our model have? Assuming each parameter is represented using single-precision floating
+point, how much memory is required to just load this model?
+Deliverable: A one-to-two sentence response.
+
+Token_Embedding's:
+trainable parameters vocab_size*d_model = 80,411,200
+FLOPs 0 No matrix product
+
+```
+RMS Norm:
+trainable parameter gain d_model = 1600
+FLOPs no matrix product
+
+MHA:
+trainable parameter qkvo d_model * (num_heads * d_k) * 4 qkvo = 10,240,000
+FLOPs QKVO batch*num_heads*(3*2*seq_len*d_model*d_k+2*seq_len*d_k*seq_len+2*seq_len*d_k*seq_len+2*seq_len*d_k*d_model)=batch*num_heads*(8l*d_m*d_k+4*seq_len^2*d_k) = 
+Q, K, V Projections: 3 * (2 * L * d_model * d_model) = 6 * 1024 * 1600^2 = 15.73 TFLOPs
+Attention Scores (Q @ Kᵀ): 2 * L * d_model * L = 2 * 1024^2 * 1600 = 3.36 TFLOPs
+Value Aggregation (Scores @ V): 2 * L * L * d_model = 2 * 1024^2 * 1600 = 3.36 TFLOPs
+Output Projection: 2 * L * d_model * d_model = 2 * 1024 * 1600^2 = 5.24 TFLOPs
+Subtotal (Attention): 15.73 + 3.36 + 3.36 + 5.24 = 27.69 TFLOPs
+
+PositionWiseFeedForward:
+trainable parameter w1 w2 w3 d_model*d_ff*3 = 30,720,000
+FLOPs batch*(2*seq_len*d_model*d_ff*2+2*seq_len*dff+2*seq_len*d_ff*d_model) ~ 6*seq_len*d_model*d_ff = 
+Feed-Forward Network (SwiGLU):
+It involves three matrix multiplies: two (L, d_model) @ (d_model, d_ff) and one (L, d_ff) @ (d_ff, d_model).
+Total FFN FLOPs: 3 * (2 * L * d_model * d_ff) = 6 * 1024 * 1600 * 6400 = 62.91 TFLOPs
+
+Total FLOPs per Block: 27.69 (Attention) + 62.91 (FFN) = 90.6 TFLOPs
+```
+
+Transformer_Block:
+trainable parameter 2rmsnorm + mha +PositionWiseFeedForward = 40,963,200
+FLOPs 2rmsnorm + mha +PositionWiseFeedForward + 2add
+* num_layers
+Total FLOPs for All Blocks
+48 Blocks * 90.6 TFLOPs/Block = 4,348.8 TFLOPs
+
+Linear:
+trainable parameter w d_model*vocab_size = 80,411,200
+FLOPs 2*batch*seq_len*d_model*vocab_size
+FLOPs for Final Output Projection
+2 * L * d_model * V = 2 * 1024 * 1600 * 50257 = 164.7 TFLOPs
+
+total:
+Embedding + Transformer_Block*num_layers+ RMSNomr + Linear = 160,822,400 (Embeddings) + 1,966,233,600 (Blocks) + 1,600 (Final Norm) = 2,127,057,600 (approximately 2.13 billion)
+
+Memory:
+Memory Requirement: Total Parameters * Bytes per Parameter
+2,127,057,600 * 4 bytes = 8,508,230,400 bytes
+To make this number more readable, we can convert it to gigabytes (GB).
+8,508,230,400 bytes / (1024^3 bytes/GB) ≈ 7.92 GB
+
+(b) Identify the matrix multiplies required to complete a forward pass of our GPT-2 XL-shaped
+model. How many FLOPs do these matrix multiplies require in total? Assume that our input
+sequence has context_length tokens.
+Deliverable: A list of matrix multiplies (with descriptions), and the total number of FLOPs
+required.
+
+(c) Based on your analysis above, which parts of the model require the most FLOPs? 
+Deliverable: A one-to-two sentence response.
+
+Transformer Block, among transformer blocks FFN require the most FLOPs, about twice as Attention Block
+
+(d) Repeat your analysis with GPT-2 small (12 layers, 768 d_model, 12 heads), GPT-2 medium (24
+layers, 1024 d_model, 16 heads), and GPT-2 large (36 layers, 1280 d_model, 20 heads). As the
+model size increases, which parts of the Transformer LM take up proportionally more or less of
+the total FLOPs?
+Deliverable: For each model, provide a breakdown of model components and its associated
+FLOPs (as a proportion of the total FLOPs required for a forward pass). In addition, provide a
+one-to-two sentence description of how varying the model size changes the proportional FLOPs
+of each component.
+
+For this analysis, we assume a standard architecture where `d_ff = 4 * d_model`. All calculations use a `context_length` of 1,024 and a `vocab_size` of 50,257.
+
+---
+
+### FLOPs Breakdown by Model Size
+
+#### GPT-2 Small
+*   **Configuration**: 12 layers, 768 `d_model`, 12 heads, 3072 `d_ff`
+*   **Total FLOPs**: 270.6 TFLOPs
+
+| Component          | FLOPs (TFLOPs) | Proportion of Total |
+| :----------------- | :------------- | :------------------ |
+| Self-Attention     | 96.5           | 35.7%               |
+| Feed-Forward (FFN) | 174.0          | 64.3%               |
+| Output Projection  | 0.1            | < 0.1%              |
+
+#### GPT-2 Medium
+*   **Configuration**: 24 layers, 1024 `d_model`, 16 heads, 4096 `d_ff`
+*   **Total FLOPs**: 928.9 TFLOPs
+
+| Component          | FLOPs (TFLOPs) | Proportion of Total |
+| :----------------- | :------------- | :------------------ |
+| Self-Attention     | 309.6          | 33.3%               |
+| Feed-Forward (FFN) | 619.2          | 66.7%               |
+| Output Projection  | 0.1            | < 0.1%              |
+
+#### GPT-2 Large
+*   **Configuration**: 36 layers, 1280 `d_model`, 20 heads, 5120 `d_ff`
+*   **Total FLOPs**: 2,124.1 TFLOPs
+
+| Component          | FLOPs (TFLOPs) | Proportion of Total |
+| :----------------- | :------------- | :------------------ |
+| Self-Attention     | 676.8          | 31.9%               |
+| Feed-Forward (FFN) | 1,447.2        | 68.1%               |
+| Output Projection  | 0.1            | < 0.1%              |
+
+---
+
+### Analysis
+
+As the model size increases, the Feed-Forward Network (FFN) layers take up a proportionally larger share of the total FLOPs, while the self-attention and final output projection layers take up proportionally less. This occurs because the computational cost of the FFNs scales more rapidly with the model dimension (`d_model`) compared to the self-attention mechanism when the sequence length is fixed.
+
+
+(e) Take GPT-2 XL and increase the context length to 16,384. How does the total FLOPs for one
+forward pass change? How do the relative contribution of FLOPs of the model components
+change?
+Deliverable: A one-to-two sentence response.
+
+Of course. Here is the detailed calculation process for the change in FLOPs when the context length is increased.
+
+### Analysis with Increased Context Length
+
+We start with the GPT-2 XL configuration and change only the context length.
+
+**Updated Configuration:**
+*   Sequence length (`L`): **16,384** (previously 1,024)
+*   Model dimension (`d_model`): 1,600
+*   Feed-forward dimension (`d_ff`): 6,400
+*   Number of layers (`N`): 48
+*   Vocabulary size (`V`): 50,257
+
+The key change to note is how the FLOPs for different components scale with the sequence length `L`:
+*   **Self-Attention**: The score calculation (`Q @ K^T`) and value aggregation (`Scores @ V`) scale quadratically with sequence length, \(O(L^2)\).
+*   **Feed-Forward Network (FFN)**: Scales linearly with sequence length, \(O(L)\).
+
+---
+
+### FLOPs Calculation (L = 16,384)
+
+#### 1. FLOPs per Transformer Block
+
+*   **Multi-Head Self-Attention**:
+    *   Q, K, V Projections: \(6 \times L \times d_{\text{model}}^2 = 6 \times 16,384 \times 1,600^2 \approx\) **251.7 TFLOPs**
+    *   Attention Scores (Q @ Kᵀ): \(2 \times L^2 \times d_{\text{model}} = 2 \times 16,384^2 \times 1,600 \approx\) **859.0 TFLOPs**
+    *   Value Aggregation (Scores @ V): \(2 \times L^2 \times d_{\text{model}} = 2 \times 16,384^2 \times 1,600 \approx\) **859.0 TFLOPs**
+    *   Output Projection: \(2 \times L \times d_{\text{model}}^2 = 2 \times 16,384 \times 1,600^2 \approx\) **83.9 TFLOPs**
+    *   *Subtotal (Attention)*: `251.7 + 859.0 + 859.0 + 83.9 =` **2,053.6 TFLOPs**
+
+*   **Feed-Forward Network (FFN)**:
+    *   \(6 \times L \times d_{\text{model}} \times d_{\text{ff}} = 6 \times 16,384 \times 1,600 \times 6,400 \approx\) **1,006.6 TFLOPs**
+
+*   **Total FLOPs per Block**: `2,053.6 (Attention) + 1,006.6 (FFN) =` **3,060.2 TFLOPs**
+
+#### 2. Total FLOPs for All 48 Blocks
+*   `48 Blocks × 3,060.2 TFLOPs/Block ≈` **146,890 TFLOPs**
+
+#### 3. FLOPs for Final Output Projection
+*   \(2 \times L \times d_{\text{model}} \times V = 2 \times 16,384 \times 1,600 \times 50,257 \approx\) **2.6 TFLOPs**
+
+---
+
+### Total FLOPs and Component Contribution
+
+*   **Total FLOPs**: `146,890 (Blocks) + 2.6 (Output) ≈` **146,892.6 TFLOPs**
+
+| Component                 | FLOPs (TFLOPs) | Proportion (L=1024) | FLOPs (TFLOPs) | Proportion (L=16,384) |
+| :------------------------ | :------------- | :------------------ | :------------- | :-------------------- |
+| **Total Self-Attention**  | 1,329.1        | 29.4%               | 98,572.8       | **67.1%**             |
+| **Total FFN**             | 3,019.9        | 66.9%               | 48,316.8       | **32.9%**             |
+| **Output Projection**     | 164.7          | 3.7%                | 2.6            | <0.1%                 |
+| **Grand Total**           | **4,513.7**    | **100%**            | **146,892.6**  | **100%**              |
+
+---
+
+### Conclusion
+
+Increasing the context length from 1,024 to 16,384 increases the total FLOPs for a forward pass from ~4,514 TFLOPs to ~146,893 TFLOPs, a more than **32-fold increase**. Due to the quadratic scaling of self-attention with sequence length, its contribution to the total FLOPs dramatically increases from **29.4% to 67.1%**, making it the new computational bottleneck, while the FFN's relative contribution decreases from 66.9% to 32.9%.

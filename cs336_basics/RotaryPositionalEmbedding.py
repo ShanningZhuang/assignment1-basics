@@ -64,27 +64,20 @@ class RotaryPositionalEmbedding(nn.Module):
         # but token_positions might be passed in without them (e.g., shape [seq_len]).
         # The following logic robustly handles this by adding and expanding the
         # missing dimensions to match the input tensor x.
-
-        # We subtract 1 because token_positions doesn't have the final d_k dimension.
-        num_missing_dims = x.ndim - token_positions.ndim - 1
-        if num_missing_dims > 0:
-            # Add singleton dimensions for the missing batch dimensions.
-            view_shape = (1,) * num_missing_dims + token_positions.shape
-            token_positions = token_positions.view(view_shape)
-            # Expand the singleton dimensions to match x's batch dimensions.
-            expand_shape = x.shape[:-2] + (-1,)
-            token_positions = token_positions.expand(expand_shape)
-
-        cos_values = self.cos_cached[token_positions]
-        sin_values = self.sin_cached[token_positions]
+        cos_values = self.cos_cached[token_positions]  # ... seq_len 1 d_k/2
+        sin_values = self.sin_cached[token_positions]  # ... seq_len 1 d_k/2
 
         # 2. Reshape x to isolate pairs using einops
         # Splits the last dimension d_k into two parts: d_k/2 and 2
-        x_reshaped = rearrange(x, "... s (d2 p) -> ... s d2 p", p=2, d2=self.d_k // 2)
+        x_reshaped = rearrange(
+            x, "... s (d2 p) -> ... s d2 p", p=2, d2=self.d_k // 2
+        )  # ... seq_len head d_k 2
         x_odd, x_even = x_reshaped[..., 0], x_reshaped[..., 1]
         x_rotate_odd = x_odd * cos_values - x_even * sin_values
         x_rotate_even = x_odd * sin_values + x_even * cos_values
-        stacked_pairs = torch.stack([x_rotate_odd, x_rotate_even], dim=-1)
+        stacked_pairs = torch.stack(
+            [x_rotate_odd, x_rotate_even], dim=-1
+        )  # ... seq_len head d_k/2 2
         # Shape of stacked_pairs: (..., seq_len, d_k / 2, 2)
         # The pattern '... s d2 p -> ... s (d2 p)' is the exact inverse
         # of the pattern you used to split the tensor.

@@ -2,6 +2,7 @@ from heapq import merge
 from typing import Any
 import regex as re
 import json
+from .common import gpt2_bytes_to_unicode
 
 
 def get_tokenizer(
