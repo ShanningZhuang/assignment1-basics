@@ -1,0 +1,36 @@
+# @package _global_
+defaults:
+  - model: small
+  - optimizer: adamw  
+  - data: tinystories
+  - experiment: debug
+  - _self_
+
+
+# _target_: functools.partial
+# Learning rate schedule
+lr_schedule:
+  _target_: cs336_basics.lr_scheduler.CosineScheduler
+  alpha_max: 3e-4
+  alpha_min: 3e-5
+  Tw: 1000
+  Tc: 10000
+  
+# Training parameters
+max_iterations: 10000
+batch_size: 32
+context_length: ${model.context_length}
+device: cpu
+seed: 42
+gradient_clip_norm: 1.0
+
+# Logging
+log_freq: 100
+val_freq: 500
+save_freq: 1000
+wandb_project: "cs336-language-model"
+val_batches: 10
+
+# Paths
+data_dir: "./data"
+resume_from: null

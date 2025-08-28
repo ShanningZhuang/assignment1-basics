@@ -9,6 +9,7 @@ import numpy.typing as npt
 from sympy.geometry.entity import scale
 import torch
 from torch import Tensor
+from torch.optim import Adam
 
 
 def run_linear(
@@ -534,7 +535,9 @@ def run_get_batch(
         is the sampled input sequences, and the second tuple item is the corresponding
         language modeling labels.
     """
-    raise NotImplementedError
+    from cs336_basics.data_loader import get_batch
+
+    return get_batch(dataset, batch_size, context_length, device)
 
 
 def run_softmax(in_features: Float[Tensor, " ..."], dim: int) -> Float[Tensor, " ..."]:
@@ -570,7 +573,9 @@ def run_cross_entropy(
     Returns:
         Float[Tensor, ""]: The average cross-entropy loss across examples.
     """
-    raise NotImplementedError
+    from cs336_basics.Loss import cross_entropy_loss
+
+    return cross_entropy_loss(inputs, targets)
 
 
 def run_gradient_clipping(
@@ -584,14 +589,18 @@ def run_gradient_clipping(
 
     The gradients of the parameters (parameter.grad) should be modified in-place.
     """
-    raise NotImplementedError
+    from cs336_basics.Optimizer import gradient_clipping
+
+    gradient_clipping(parameters=parameters, max_l2_norm=max_l2_norm)
 
 
 def get_adamw_cls() -> Any:
     """
     Returns a torch.optim.Optimizer that implements AdamW.
     """
-    raise NotImplementedError
+    from cs336_basics.Optimizer import AdamW
+
+    return AdamW
 
 
 def run_get_lr_cosine_schedule(
@@ -619,7 +628,15 @@ def run_get_lr_cosine_schedule(
     Returns:
         Learning rate at the given iteration under the specified schedule.
     """
-    raise NotImplementedError
+    from cs336_basics.lr_scheduler import CosineScheduler
+
+    scheduler = CosineScheduler(
+        alpha_max=max_learning_rate,
+        alpha_min=min_learning_rate,
+        Tw=warmup_iters,
+        Tc=cosine_cycle_iters,
+    )
+    return scheduler.get_lr(it)
 
 
 def run_save_checkpoint(
@@ -638,7 +655,9 @@ def run_save_checkpoint(
             we've completed.
         out (str | os.PathLike | BinaryIO | IO[bytes]): Path or file-like object to serialize the model, optimizer, and iteration to.
     """
-    raise NotImplementedError
+    from cs336_basics.checkpoint import save_checkpoint
+
+    save_checkpoint(model, optimizer, iteration, out)
 
 
 def run_load_checkpoint(
@@ -659,7 +678,9 @@ def run_load_checkpoint(
     Returns:
         int: the previously-serialized number of iterations.
     """
-    raise NotImplementedError
+    from cs336_basics.checkpoint import load_checkpoint
+
+    return load_checkpoint(src, model, optimizer)
 
 
 def get_tokenizer(

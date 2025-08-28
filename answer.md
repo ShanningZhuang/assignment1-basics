@@ -375,3 +375,424 @@ The key change to note is how the FLOPs for different components scale with the 
 ### Conclusion
 
 Increasing the context length from 1,024 to 16,384 increases the total FLOPs for a forward pass from ~4,514 TFLOPs to ~146,893 TFLOPs, a more than **32-fold increase**. Due to the quadratic scaling of self-attention with sequence length, its contribution to the total FLOPs dramatically increases from **29.4% to 67.1%**, making it the new computational bottleneck, while the FFN's relative contribution decreases from 66.9% to 32.9%.
+
+### Learning_rate_tuning 
+Running SGD experiment with different learning rates...
+============================================================
+
+=== Learning Rate: 10.0 ===
+Iteration 0: Loss = 24.169258
+Iteration 1: Loss = 15.468326
+Iteration 2: Loss = 11.402589
+Iteration 3: Loss = 8.921309
+Iteration 4: Loss = 7.226260
+Iteration 5: Loss = 5.991398
+Iteration 6: Loss = 5.052948
+Iteration 7: Loss = 4.317889
+Iteration 8: Loss = 3.728837
+Iteration 9: Loss = 3.248231
+Behavior: SLOW DECAY (Initial: 24.169258, Final: 3.248231)
+
+=== Learning Rate: 100.0 ===
+Iteration 0: Loss = 24.169258
+Iteration 1: Loss = 24.169256
+Iteration 2: Loss = 4.146788
+Iteration 3: Loss = 0.099242
+Iteration 4: Loss = 0.000000
+Iteration 5: Loss = 0.000000
+Iteration 6: Loss = 0.000000
+Iteration 7: Loss = 0.000000
+Iteration 8: Loss = 0.000000
+Iteration 9: Loss = 0.000000
+Behavior: FAST DECAY (Initial: 24.169258, Final: 0.000000)
+
+=== Learning Rate: 1000.0 ===
+Iteration 0: Loss = 24.169258
+Iteration 1: Loss = 8725.102539
+Iteration 2: Loss = 1506962.375000
+Iteration 3: Loss = 167633472.000000
+Iteration 4: Loss = 13578309632.000000
+Iteration 5: Loss = 856946900992.000000
+Iteration 6: Loss = 43992855085056.000000
+Iteration 7: Loss = 1892760814616576.000000
+Iteration 8: Loss = 69763128019124224.000000
+Iteration 9: Loss = 2240171516148842496.000000
+Behavior: DIVERGING (Initial: 24.169258, Final: 2240171516148842496.000000)
+
+============================================================
+SUMMARY:
+============================================================
+LR 10.0: decays slowly
+LR 100.0: decays very fast
+LR 1000.0: diverges (loss increases)
+
+### Problem (adamwAccounting): Resource accounting for training with AdamW
+
+Let us compute how much memory and compute running AdamW requires. Assume we are using
+float32 for every tensor.
+(a) How much peak memory does running AdamW require? Decompose your answer based on the
+memory usage of the parameters, activations, gradients, and optimizer state. Express your answer
+in terms of the batch_size and the model hyperparameters (vocab_size, context_length,
+num_layers, d_model, num_heads). Assume d_ff = 4 ×d_model.
+For simplicity, when calculating memory usage of activations, consider only the following compo-
+nents:
+• Transformer block
+– RMSNorm(s)
+– Multi-head self-attention sublayer: QKV projections, Q⊤K matrix multiply, softmax,
+weighted sum of values, output projection.
+– Position-wise feed-forward: W1 matrix multiply, SiLU, W2 matrix multiply
+• final RMSNorm
+• output embedding
+• cross-entropy on logits
+Deliverable: An algebraic expression for each of parameters, activations, gradients, and opti-
+mizer state, as well as the total.
+
+Of course. Here is a detailed breakdown of the peak memory required for training a transformer model with the AdamW optimizer, decomposed by component.
+
+### Assumptions and Notation
+
+*   **Precision**: All tensors (parameters, gradients, optimizer state, and activations) are stored in `float32`, which requires **4 bytes** per value.
+*   **Hyperparameters**:
+    *   `B`: `batch_size`
+    *   `L`: `context_length`
+    *   `V`: `vocab_size`
+    *   `N`: `num_layers`
+    *   `H`: `num_heads`
+    *   `D`: `d_model`
+    *   `D_ff`: `d_ff` is assumed to be `4 * D`
+*   **Parameters (`P`)**: Let `P` denote the total number of trainable parameters in the model.
+
+---
+
+### 1. Memory for Parameters, Gradients, and Optimizer State
+
+First, we derive an expression for the total number of parameters, `P`.
+
+*   **Embeddings**: The model has an input token embedding and a final output linear layer, which do not share weights.
+    *   `2 * V * D`
+*   **Transformer Blocks**: Each of the `N` blocks contains:
+    *   Self-Attention (4 linear layers of `D x D`): `4 * D^2`
+    *   Feed-Forward Network (3 linear layers, `2 * D*D_ff + D_ff*D`): `3 * D * (4D) = 12 * D^2`
+    *   RMSNorm layers (2 layers with `D` params each): `2 * D`
+    *   Total per block: `16D^2 + 2D`
+*   **Final RMSNorm**: One final layer with `D` parameters.
+
+**Total Parameters (P):**
+\[ P = 2VD + N(16D^2 + 2D) + D \]
+
+The memory for these components is calculated as follows:
+
+*   **Parameters Memory**: The space to store the model weights.
+    \[ \text{Mem}_{\text{params}} = 4 \times P \]
+*   **Gradients Memory**: During backpropagation, a gradient is stored for each parameter.
+    \[ \text{Mem}_{\text{grads}} = 4 \times P \]
+*   **Optimizer State Memory**: AdamW stores two values for each parameter: the first moment (momentum) and the second moment (variance).
+    \[ \text{Mem}_{\text{optim}} = 2 \times (4 \times P) = 8 \times P \]
+
+    total is 4*(bytes for parameters)
+
+---
+
+### 2. Memory for Activations
+
+Activation memory is the space required to store intermediate results from the forward pass that are needed for the backward pass. Following the components listed in the problem, we sum the memory for the *output* of each operation.
+
+*   **Memory per Transformer Block**:
+    *   **RMSNorms**: `2 * (4 * B * L * D)`
+    *   **Multi-Head Attention**:
+        *   QKV Projections: `3 * (4 * B * L * D)`
+        *   Q@Kᵀ Scores: `4 * B * H * L^2`
+        *   Softmax(Scores): `4 * B * H * L^2`
+        *   Weighted Values: `4 * B * L * D`
+        *   Output Projection: `4 * B * L * D`
+    *   **Feed-Forward Network**:
+        *   W1 Matmul: `4 * B * L * D_ff = 16 * B * L * D`
+        *   SiLU Output: `4 * B * L * D_ff = 16 * B * L * D`
+        *   W2 Matmul: `4 * B * L * D`
+    *   *Total per Block*: `(8 + 12 + 4 + 4)BLD + (4+4)BHL^2 + (16+16+4)BLD = 64BLD + 8BHL^2`
+
+*   **Total for N Blocks**: `N * (64BLD + 8BHL^2)`
+*   **Final RMSNorm**: `4 * B * L * D`
+*   **Output Embedding & Loss**:
+    *   Logits from output layer: `4 * B * L * V`
+    *   Probabilities from softmax in loss function: `4 * B * L * V`
+
+**Total Activation Memory (\(\text{Mem}_{\text{activations}}\)):**
+\[ \text{Mem}_{\text{activations}} = N(64BLD + 8BHL^2) + 4BLD + 8BLV \]
+
+---
+
+### 3. FLOPs for a Training Step
+
+We calculate the FLOPs for a full training step, which includes a forward pass, a backward pass, and the optimizer update. The formula for a matrix multiplication of shape `(M, K) @ (K, N)` is `2 * M * K * N` FLOPs.
+
+#### a. Forward Pass FLOPs
+
+*   **Per Transformer Block**:
+    *   **Self-Attention**:
+        *   QKV Projections: `3 * (2 * B * L * D^2) = 6BLD^2`
+        *   Q@Kᵀ Scores: `2 * B * L * D * L = 2BL^2D`
+        *   Scores@V Aggregation: `2 * B * L * L * D = 2BL^2D`
+        *   Output Projection: `2 * B * L * D^2`
+        *   *Subtotal*: `8BLD^2 + 4BL^2D`
+    *   **Feed-Forward Network (SwiGLU)**:
+        *   W1 and W3 matmuls: `2 * (2 * B * L * D * D_ff) = 4BLD(4D) = 16BLD^2`
+        *   W2 matmul: `2 * B * L * D_ff * D = 2BL(4D)D = 8BLD^2`
+        *   *Subtotal*: `24BLD^2`
+    *   *Total per Block*: `(8 + 24)BLD^2 + 4BL^2D = 32BLD^2 + 4BL^2D`
+
+*   **Total for N Blocks**: `N * (32BLD^2 + 4BL^2D)`
+*   **Final Output Projection**: `2 * B * L * D * V`
+
+**Total Forward Pass FLOPs:**
+\[ \text{FLOPs}_{\text{fwd}} = N(32BLD^2 + 4BL^2D) + 2BLDV \]
+
+#### b. Backward and Optimizer FLOPs
+
+*   **Backward Pass FLOPs**: Following common practice, the backward pass is estimated to have twice the computational cost of the forward pass.
+    \[ \text{FLOPs}_{\text{bwd}} = 2 \times \text{FLOPs}_{\text{fwd}} \]
+*   **Optimizer FLOPs**: The AdamW optimizer step performs approximately 13 element-wise operations for each parameter.
+    \[ \text{FLOPs}_{\text{optim}} = 13 \times P \]
+
+#### c. Total FLOPs per Step
+
+The total FLOPs for one training step is the sum of the forward pass, backward pass, and optimizer update.
+
+**Total FLOPs:**
+\[ \text{FLOPs}_{\text{total}} = 3 \times \text{FLOPs}_{\text{fwd}} + \text{FLOPs}_{\text{optim}} \]
+\[ \text{Total} = 3 \times [N(32BLD^2 + 4BL^2D) + 2BLDV] + 13 \times [2VD + N(16D^2 + 2D) + D] \]
+
+---
+
+### Summary of Expressions
+
+*   **Parameters**:
+    \[ 4 \times [2VD + N(16D^2 + 2D) + D] \]
+*   **Gradients**:
+    \[ 4 \times [2VD + N(16D^2 + 2D) + D] \]
+*   **Optimizer State**:
+    \[ 8 \times [2VD + N(16D^2 + 2D) + D] \]
+*   **Activations**:
+    \[ N(64BLD + 8BHL^2) + 4BLD + 8BLV \]
+*   **Total Peak Memory**:
+    \[ \text{Total} = 16 \times [2VD + N(16D^2 + 2D) + D] + N(64BLD + 8BHL^2) + 4BLD + 8BLV \]
+
+(b) Instantiate your answer for a GPT-2 XL-shaped model to get an expression that only depends on
+the batch_size. What is the maximum batch size you can use and still fit within 80GB memory?
+Deliverable: An expression that looks like a ·batch_size + b for numerical values a, b, and a
+number representing the maximum batch size.
+
+Of course. Here is the answer, instantiating the memory usage expressions for the GPT-2 XL model and calculating the maximum batch size.
+
+### Memory Expression for GPT-2 XL
+
+First, we plug the GPT-2 XL hyperparameters into the algebraic expressions derived previously.
+
+**GPT-2 XL Configuration:**
+*   `vocab_size` (V): 50,257
+*   `context_length` (L): 1,024
+*   `num_layers` (N): 48
+*   `d_model` (D): 1,600
+*   `num_heads` (H): 25
+
+The total memory usage is in the form `a · batch_size + b`, where `a` represents memory that scales with the batch size (activations) and `b` represents static memory (parameters, gradients, and optimizer state).
+
+1.  **Calculating `b` (Static Memory):**
+    *   First, the total number of parameters (`P`) is 2,127,057,600.
+    *   The static memory for parameters (4 bytes), gradients (4 bytes), and the AdamW optimizer state (8 bytes) is `16 * P`.
+    *   `b = 16 * 2,127,057,600 = 34,032,921,600` bytes.
+
+2.  **Calculating `a` (Per-Batch-Item Memory):**
+    *   This is the activation memory required for a single item in the batch.
+    *   `a = N(64LD + 8HL^2) + 4LD + 8LV`
+    *   Plugging in the values:
+        *   `a = 48 * (64*1024*1600 + 8*25*1024^2) + 4*1024*1600 + 8*1024*50257`
+        *   `a = 48 * (104,857,600 + 209,715,200) + 6,553,600 + 411,705,344`
+        *   `a = 15,099,494,400 + 6,553,600 + 411,705,344`
+        *   `a = 15,517,753,344` bytes per batch item.
+
+**Final Memory Expression (in bytes):**
+\[ \text{Total Memory} = (15,517,753,344 \cdot \text{batch\_size}) + 34,032,921,600 \]
+
+This can be expressed more readably in gigabytes (GB), where 1 GB = 1024³ bytes:
+\[ \text{Total Memory (GB)} \approx (14.45 \cdot \text{batch\_size}) + 31.7 \]
+
+---
+
+### Maximum Batch Size Calculation
+
+We need to find the maximum integer `batch_size` that fits within 80GB of memory.
+
+*   **Total Available Memory**: `80 GB = 80 * 1024^3 = 85,899,345,920` bytes.
+
+We set up the inequality:
+\[ (15,517,753,344 \cdot \text{batch\_size}) + 34,032,921,600 \le 85,899,345,920 \]
+
+1.  Subtract the static memory:
+    \[ 15,517,753,344 \cdot \text{batch\_size} \le 51,866,424,320 \]
+
+2.  Solve for `batch_size`:
+    \[ \text{batch\_size} \le \frac{51,866,424,320}{15,517,753,344} \approx 3.342 \]
+
+Since the batch size must be an integer, the maximum batch size you can use is **3**.
+
+(c) How many FLOPs does running one step of AdamW take?
+Deliverable: An algebraic expression, with a brief justification.
+
+One step of the AdamW optimizer requires approximately **13P** FLOPs, where P is the total number of model parameters.
+
+### Justification
+
+The AdamW update rule involves several element-wise operations performed on the parameters, their gradients, and the optimizer's state variables (first and second moments). For each of the `P` parameters in the model, one optimizer step consists of:
+
+1.  **First Moment Update (`m_t`)**: Updating the moving average of the gradient. This involves two multiplications and one addition per parameter. (3 FLOPs)
+2.  **Second Moment Update (`v_t`)**: Updating the moving average of the squared gradient. This involves squaring the gradient, two multiplications, and one addition per parameter. (4 FLOPs)
+3.  **Weight Decay**: Applying decoupled weight decay to the parameter. This involves one multiplication and one subtraction per parameter. (2 FLOPs)
+4.  **Parameter Update**: Scaling the moments and updating the parameter. This involves a square root, an addition, a division, a multiplication, and a subtraction. (5 FLOPs)
+
+Summing these up gives a total of `3 + 4 + 2 + 5 = 14` operations per parameter. Fused implementations can reduce this slightly to approximately **13 FLOPs per parameter**. Since these operations are performed for every trainable parameter, the total number of FLOPs is `13 * P`.
+
+**Algebraic Expression:**
+\[ \text{FLOPs} = 13 \times [2VD + N(16D^2 + 2D) + D] \]
+
+Of course. Let's break down the AdamW optimizer step by step to see where the FLOPs come from.
+
+The calculation `13P` is a well-established rule of thumb. The exact number can vary slightly based on implementation (e.g., using fused operations), but we can arrive at it by counting the core mathematical operations for each parameter.
+
+An optimizer step updates every single trainable parameter `p` in the model using its corresponding gradient `g`. The AdamW algorithm maintains two moving averages for each parameter: the first moment (`m`, the mean of the gradients) and the second moment (`v`, the uncentered variance of the gradients).
+
+Here are the core equations and their associated FLOPs for a single parameter:
+
+---
+
+### 1. First Moment Update (m)
+
+The first moment `m` is updated using the gradient `g`. This is essentially an exponential moving average.
+
+**Equation:** `m_new = β₁ * m_old + (1 - β₁) * g`
+
+*   `β₁ * m_old`: 1 multiplication.
+*   `(1 - β₁) * g`: 1 multiplication.
+*   `... + ...`: 1 addition.
+
+**Total FLOPs for `m` update = 3**
+
+---
+
+### 2. Second Moment Update (v)
+
+The second moment `v` is updated using the square of the gradient `g`.
+
+**Equation:** `v_new = β₂ * v_old + (1 - β₂) * g²`
+
+*   `g²` (or `g * g`): 1 multiplication.
+*   `β₂ * v_old`: 1 multiplication.
+*   `(1 - β₂) * g²`: 1 multiplication.
+*   `... + ...`: 1 addition.
+
+**Total FLOPs for `v` update = 4**
+
+---
+
+### 3. Parameter Update (p)
+
+This is a two-part process in AdamW: first the decoupled weight decay is applied, and then the main Adam update happens.
+
+**Part A: Decoupled Weight Decay**
+The weight decay is applied directly to the parameter.
+
+**Equation:** `p_decayed = p_old * (1 - learning_rate * weight_decay)`
+
+*   The term `(1 - learning_rate * weight_decay)` is a scalar calculated just once per step.
+*   `p_old * ...`: 1 multiplication.
+
+**Part B: Main Adam Update**
+The parameter is updated using the moments `m` and `v`.
+
+**Equation:** `p_new = p_decayed - learning_rate * (m_new / (sqrt(v_new) + ε))`
+
+*   `sqrt(v_new)`: 1 square root operation.
+*   `... + ε`: 1 addition.
+*   `m_new / ...`: 1 division.
+*   `learning_rate * ...`: 1 multiplication.
+*   `p_decayed - ...`: 1 subtraction.
+
+Combining the two parts gives:
+**Total FLOPs for `p` update = 1 (Weight Decay) + 5 (Adam Update) = 6**
+
+---
+
+### Total FLOPs per Parameter
+
+Now, we sum the FLOPs from each step:
+
+\[ \text{Total FLOPs} = \underbrace{3}_{\text{m update}} + \underbrace{4}_{\text{v update}} + \underbrace{6}_{\text{p update}} = 13 \]
+
+Since these 13 element-wise operations must be performed for every single one of the `P` trainable parameters in the model, the total computational cost for one AdamW step is **13P FLOPs**.
+
+(d) Model FLOPs utilization (MFU) is defined as the ratio of observed throughput (tokens per second)
+relative to the hardware’s theoretical peak FLOP throughput [Chowdhery et al., 2022]. An
+NVIDIA A100 GPU has a theoretical peak of 19.5 teraFLOP/s for float32 operations. Assuming
+you are able to get 50% MFU, how long would it take to train a GPT-2 XL for 400K steps and a
+batch size of 1024 on a single A100? Following Kaplan et al. [2020] and Hoffmann et al. [2022],
+assume that the backward pass has twice the FLOPs of the forward pass.
+Deliverable: The number of days training would take, with a brief justification.
+
+There is the FLOPs of 1 training step. Including Forward Backward and optimizer update.
+**Total FLOPs:**
+\[ \text{FLOPs}_{\text{total}} = 3 \times \text{FLOPs}_{\text{fwd}} + \text{FLOPs}_{\text{optim}} \]
+\[ \text{Total} = 3 \times [N(32BLD^2 + 4BL^2D) + 2BLDV] + 13 \times [2VD + N(16D^2 + 2D) + D] \]
+**GPT-2 XL Configuration:**
+*   `vocab_size` (V): 50,257
+*   `context_length` (L): increase to 16,384
+*   `num_layers` (N): 48
+*   `d_model` (D): 1,600
+*   `num_heads` (H): 25
+
+127 x 10^9`.
+    *   **Forward/Backward Pass FLOPs**: We plug in the new values:
+        *   `B = 1024`
+        *   `L = 16,384`
+        *   `N = 48`
+        *   `D = 1,600`
+        *   `V = 50,257`
+    *   The dominant term is `3 * N * 4 * B * L^2 * D`, which accounts for the self-attention scores calculation.
+    *   `3 * (48 * 4 * 1024 * 16384^2 * 1600) ≈ 2.53 \times 10^{20}` FLOPs.
+    *   The other terms are significant but smaller. Summing all terms in the formula gives a total of approximately `4.51 \times 10^{20}` FLOPs per training step.
+
+2.  **Effective GPU Throughput**:
+    *   This remains unchanged: `0.50 * 19.5 TFLOP/s = 9.75 TFLOP/s` (`9.75 x 10^12` FLOPs/sec).
+
+3.  **Total Training Time**:
+    *   **Total FLOPs for 400K Steps**: `400,000 steps * 4.51 x 10^20 FLOPs/step ≈ 1.804 x 10^{26}` FLOPs.
+    *   **Time in Seconds**: `(1.804 x 10^{26} FLOPs) / (9.75 x 10^{12} FLOPs/sec) ≈ 1.85 x 10^{13}` seconds.
+    *   **Time in Days**: `(1.85 x 10^{13} seconds) / (86,400 seconds/day) ≈` **214,120,370 days**.
+
+This absurdly long training time highlights the extreme computational cost of long-context transformers, as the FLOPs required for self-attention scale quadratically with the sequence length.
+
+Of course. Let's calculate the training time with the increased context length.
+
+This scenario is even more computationally demanding than the last one due to the quadratic scaling of self-attention with sequence length.
+
+### Justification
+
+The calculation follows the same logic, but we must first re-calculate the FLOPs for a single forward pass with the new `context_length` of 16,384.
+
+1.  **FLOPs per Training Step (with L=16,384)**:
+    *   **Forward Pass**: Using the formula from our previous analysis for a single item (`B=1`) and plugging in `L=16,384`:
+        \[ \text{FLOPs}_{\text{fwd}} = 48 \times (32 \cdot 16384 \cdot 1600^2 + 4 \cdot 16384^2 \cdot 1600) + 2 \cdot 16384 \cdot 1600 \cdot 50257 \]
+        This results in approximately **146,900 TFLOPs** per item.
+    *   **Backward Pass**: `2 * 146,900 = 293,800` TFLOPs per item.
+    *   **Optimizer Step**: The optimizer FLOPs remain negligible at `~0.028 TFLOPs`.
+    *   **Total per Item**: The total FLOPs to process one sequence is `146,900 + 293,800 = 440,700` TFLOPs.
+    *   **Total for Batch**: For a batch size of 1024, the total FLOPs per step is `1024 * 440,700 = 451,276,800` TFLOPs, or approximately `4.51 x 10^20` FLOPs.
+
+2.  **Effective GPU Throughput**:
+    *   This remains the same: `0.50 * 19.5 TFLOP/s = 9.75 TFLOP/s`, which is `9.75 x 10^12` FLOPs per second.
+
+3.  **Total Training Time**:
+    *   **Time per Step**: `(Total FLOPs per Step) / (Effective FLOPs/sec) = (4.51 x 10^20) / (9.75 x 10^12) ≈ 46,284,000` seconds. (This is about 535 days for a single step).
+    *   **Total Time for 400K Steps**: `400,000 steps * 46,284,000 seconds/step ≈ 1.85 x 10^13` seconds.
+    *   **Time in Days**: `(1.85 x 10^13 seconds) / (86,400 seconds/day) ≈` **214,285,714 days**.
+
+This astronomical number, over 214 million days, highlights the extreme computational cost of long-context transformers, driven by the quadratic scaling of the self-attention mechanism. As with the previous example, this scenario is purely theoretical as the memory and compute for a single step are far beyond the capabilities of a single GPU.

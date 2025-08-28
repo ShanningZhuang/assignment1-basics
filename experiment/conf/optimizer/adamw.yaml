@@ -1,0 +1,7 @@
+# @package optimizer
+_target_: cs336_basics.Optimizer.AdamW
+lr: 3e-4
+weight_decay: 0.1
+betas: [0.9, 0.95]
+eps: 1e-8
+

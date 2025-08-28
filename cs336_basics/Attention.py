@@ -130,7 +130,9 @@ class MultiheadSelfAttention(nn.Module):
         )
         if self.rope is not None:
             if token_positions is None:
-                token_positions = torch.arange(queries.shape[-2]).view(
+                token_positions = torch.arange(
+                    queries.shape[-2], device=queries.device
+                ).view(
                     1, -1
                 )  # 1 sequence_length
             token_positions.unsqueeze(-2)
@@ -138,7 +140,9 @@ class MultiheadSelfAttention(nn.Module):
             keys = self.rope(keys, token_positions)
         seq_len = in_features.shape[-2]
         masks = (
-            torch.triu(torch.ones(seq_len, seq_len), diagonal=1)
+            torch.triu(
+                torch.ones(seq_len, seq_len, device=in_features.device), diagonal=1
+            )
             .bool()
             .view(1, 1, seq_len, seq_len)
         )  # ... 1 seq_len seq_len, corresponding to Q, K, Q is row and K is column

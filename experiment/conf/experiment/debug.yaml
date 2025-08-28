@@ -1,0 +1,40 @@
+# @package _global_
+# Debug configuration for fast iteration and testing
+
+defaults:
+  - override /model: small  # Use small model as base
+  - override /optimizer: adamw
+
+# Override training parameters for fast debugging
+max_iterations: 500        # Very short training for quick testing
+batch_size: 8             # Small batch for faster iteration
+
+# Make the model even smaller for debugging
+model:
+  d_model: 128            # Much smaller than default 512
+  num_heads: 4            # Fewer heads
+  d_ff: 512               # Smaller feedforward
+  num_layers: 2           # Very few layers
+  context_length: 128        # Shorter max sequence
+
+# Aggressive learning rate for faster convergence (or faster failure)
+optimizer:
+  lr: 1e-3               # Higher LR to see changes quickly
+
+# Very frequent logging for debugging
+log_freq: 10             # Log every 10 steps (vs 100)
+val_freq: 50             # Validate every 50 steps (vs 500)  
+save_freq: 100           # Save every 100 steps (vs 1000)
+val_batches: 5           # Fewer validation batches for speed
+
+# Gradient clipping for stability
+gradient_clip_norm: 0.5  # Tighter clipping for stability
+
+# Debug-specific settings
+wandb_project: "cs336-debug"  # Separate wandb project for debug runs
+checkpoint_dir: "debug_checkpoints"  # Separate checkpoint directory
+
+# Keep same data and device
+# device: cuda (inherited)
+# data: tinystories (inherited)
+# seed: 42 (inherited - good for reproducibility)

@@ -29,9 +29,15 @@ class RotaryPositionalEmbedding(nn.Module):
         self.max_seq_len = max_seq_len
         self.device = device
 
-        theta_i = torch.pow(theta, -2 * torch.arange(d_k / 2) / d_k).view(1, -1)
-        cos_values = torch.cos(theta_i * torch.arange(max_seq_len).view(-1, 1))
-        sin_values = torch.sin(theta_i * torch.arange(max_seq_len).view(-1, 1))
+        theta_i = torch.pow(
+            theta, -2 * torch.arange(d_k / 2, device=device) / d_k
+        ).view(1, -1)
+        cos_values = torch.cos(
+            theta_i * torch.arange(max_seq_len, device=device).view(-1, 1)
+        )
+        sin_values = torch.sin(
+            theta_i * torch.arange(max_seq_len, device=device).view(-1, 1)
+        )
         self.register_buffer("cos_cached", cos_values, persistent=False)
         self.register_buffer("sin_cached", sin_values, persistent=False)
 
