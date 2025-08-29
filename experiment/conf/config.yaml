@@ -3,24 +3,23 @@ defaults:
   - model: small
   - optimizer: adamw  
   - data: tinystories
-  - experiment: debug
+  - experiment: full_train.yaml
   - _self_
 
 
-# _target_: functools.partial
 # Learning rate schedule
 lr_schedule:
   _target_: cs336_basics.lr_scheduler.CosineScheduler
-  alpha_max: 3e-4
+  alpha_max: ${optimizer.lr}
   alpha_min: 3e-5
-  Tw: 1000
-  Tc: 10000
+  Tw: 10000
+  Tc: 35000
   
 # Training parameters
-max_iterations: 10000
+max_iterations: 40000
 batch_size: 32
 context_length: ${model.context_length}
-device: cpu
+device: cuda
 seed: 42
 gradient_clip_norm: 1.0
 

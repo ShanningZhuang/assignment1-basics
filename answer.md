@@ -796,3 +796,174 @@ The calculation follows the same logic, but we must first re-calculate the FLOPs
     *   **Time in Days**: `(1.85 x 10^13 seconds) / (86,400 seconds/day) ≈` **214,285,714 days**.
 
 This astronomical number, over 214 million days, highlights the extreme computational cost of long-context transformers, driven by the quadratic scaling of the self-attention mechanism. As with the previous example, this scenario is purely theoretical as the memory and compute for a single step are far beyond the capabilities of a single GPU.
+
+## Training Expense
+
+### Memory
+*   **Precision**: All tensors (parameters, gradients, optimizer state, and activations) are stored in `float32`, which requires **4 bytes** per value.
+*   **Hyperparameters**:
+    *   `B`: `batch_size`
+    *   `L`: `context_length`
+    *   `V`: `vocab_size`
+    *   `N`: `num_layers`
+    *   `H`: `num_heads`
+    *   `D`: `d_model`
+    *   `D_ff`: `d_ff` is assumed to be `4 * D`
+*   **Parameters (`P`)**: Let `P` denote the total number of trainable parameters in the model.
+
+
+*   **Parameters**:
+    \[ 4 \times [2VD + N(16D^2 + 2D) + D] \]
+*   **Gradients**:
+    \[ 4 \times [2VD + N(16D^2 + 2D) + D] \]
+*   **Optimizer State**:
+    \[ 8 \times [2VD + N(16D^2 + 2D) + D] \]
+*   **Activations**:
+    \[ N(64BLD + 8BHL^2) + 4BLD + 8BLV \]
+*   **Total Peak Memory**:
+    \[ \text{Total} = 16 \times [2VD + N(16D^2 + 2D) + D] + N(64BLD + 8BHL^2) + 4BLD + 8BLV \]
+
+### FLOPs
+*   **Per Transformer Block**:
+    *   **Self-Attention**:
+        *   QKV Projections: `3 * (2 * B * L * D^2) = 6BLD^2`
+        *   Q@Kᵀ Scores: `2 * B * L * D * L = 2BL^2D`
+        *   Scores@V Aggregation: `2 * B * L * L * D = 2BL^2D`
+        *   Output Projection: `2 * B * L * D^2`
+        *   *Subtotal*: `8BLD^2 + 4BL^2D`
+    *   **Feed-Forward Network (SwiGLU)**:
+        *   W1 and W3 matmuls: `2 * (2 * B * L * D * D_ff) = 4BLD(4D) = 16BLD^2`
+        *   W2 matmul: `2 * B * L * D_ff * D = 2BL(4D)D = 8BLD^2`
+        *   *Subtotal*: `24BLD^2`
+    *   *Total per Block*: `(8 + 24)BLD^2 + 4BL^2D = 32BLD^2 + 4BL^2D`
+
+*   **Total for N Blocks**: `N * (32BLD^2 + 4BL^2D)`
+*   **Final Output Projection**: `2 * B * L * D * V`
+
+**Total Forward Pass FLOPs:**
+\[ \text{FLOPs}_{\text{fwd}} = N(32BLD^2 + 4BL^2D) + 2BLDV \]
+
+*   **Backward Pass FLOPs**: Following common practice, the backward pass is estimated to have twice the computational cost of the forward pass.
+    \[ \text{FLOPs}_{\text{bwd}} = 2 \times \text{FLOPs}_{\text{fwd}} \]
+*   **Optimizer FLOPs**: The AdamW optimizer step performs approximately 13 element-wise operations for each parameter.
+    \[ \text{FLOPs}_{\text{optim}} = 13 \times P \]
+
+**Total FLOPs:**
+\[ \text{FLOPs}_{\text{total}} = 3 \times \text{FLOPs}_{\text{fwd}} + \text{FLOPs}_{\text{optim}} \]
+\[ \text{Total} = 3 \times [N(32BLD^2 + 4BL^2D) + 2BLDV] + 13 \times [2VD + N(16D^2 + 2D) + D] \]
+
+## Training tinystory
+
+vocab_size: 10000
+d_model: 512
+num_heads: 16
+d_ff: 1344
+num_layers: 4
+context_length: 256
+rope_theta: 10000.0
+max_iterations: 40000
+batch_size: 32
+optimizer: adamw
+
+Of course! I can help you calculate the FLOPs and memory needed for your model. I'll use the formulas from your `answer.md` and the hyperparameters you've provided, adjusting the formulas where necessary to account for your specific `d_ff` value.
+
+Here are the hyperparameters I'll be using for the calculation:
+
+*   `V` (vocab_size): 10000
+*   `D` (d\_model): 512
+*   `H` (num\_heads): 16
+*   `D_ff` (d\_ff): 1344
+*   `N` (num\_layers): 4
+*   `L` (context\_length): 256
+*   `B` (batch\_size): 32 (from `experiment/conf/experiment/debug.yaml`)
+
+Your provided formulas in `answer.md` assume that `d_ff = 4 * d_model`. In your case, `d_ff` is `1344`, which is not equal to `4 * 512 = 2048`. I will adjust the formulas to use your specific `d_ff` for a more accurate calculation.
+
+Of course. Here is a detailed step-by-step breakdown of the calculations for memory and FLOPs, using the formulas from your `answer.md` and adjusting them for your specific hyperparameters.
+
+### 1. Hyperparameters
+
+First, let's list the hyperparameters we'll use for the calculations:
+
+*   `V` (vocab_size): 10,000
+*   `D` (d\_model): 512
+*   `H` (num\_heads): 16
+*   `D_ff` (d\_ff): 1,344
+*   `N` (num\_layers): 4
+*   `L` (context\_length): 256
+*   `B` (batch\_size): 32
+
+A key point is that your formulas in `answer.md` assume `D_ff = 4 * D`. In your case, `D_ff = 1344`, which is not `4 * 512 = 2048`. Therefore, I will substitute your specific `D_ff` value into the formulas.
+
+### 2. Memory Calculation
+
+The total memory is the sum of memory for parameters, gradients, optimizer state, and activations. We'll assume `float32` precision, which uses 4 bytes per value.
+
+#### a. Parameters (P)
+
+First, we calculate the total number of model parameters. The formula needs to be adjusted for your `D_ff`.
+
+*   **Embeddings**: This includes the token embedding table and the final output projection layer.
+    *   `2 * V * D = 2 * 10000 * 512 = 10,240,000`
+*   **Transformer Blocks**: There are `N` identical blocks. Each block contains:
+    *   **Self-Attention**: Four matrices (Q, K, V, O), each of size `D x D`.
+        *   `4 * D^2 = 4 * 512^2 = 1,048,576`
+    *   **Feed-Forward Network (SwiGLU)**: Three matrices (W1, W3, W2).
+        *   `2 * D * D_ff + D_ff * D = 2 * 512 * 1344 + 1344 * 512 = 1,376,256 + 688,128 = 2,064,384`
+    *   **LayerNorms**: Two LayerNorms per block, each with a weight and bias.
+        *   `2 * 2 * D = 4 * 512 = 2,048`
+    *   **Total per block**: `1,048,576 + 2,064,384 + 2,048 = 3,114,908`
+*   **Total for N blocks**:
+    *   `N * (params per block) = 4 * 3,114,908 = 12,459,632`
+*   **Final LayerNorm**: One final LayerNorm after the transformer blocks.
+    *   `2 * D = 2 * 512 = 1,024`
+
+**Total Parameters (P):**
+\[ P = 10,240,000 + 12,459,632 + 1,024 = \textbf{22,700,656} \approx \textbf{22.7M} \]
+
+#### b. Memory Usage Breakdown
+
+*   **Parameters**: `P * 4 bytes`
+    *   `22,700,656 * 4 bytes = 90,802,624 bytes =` **86.6 MiB**
+*   **Gradients**: `P * 4 bytes`
+    *   **86.6 MiB**
+*   **Optimizer State (AdamW)**: AdamW stores two moments (m, v) for each parameter, so it needs twice the memory of the parameters.
+    *   `P * 8 bytes = 22,700,656 * 8 bytes = 181,605,248 bytes =` **173.2 MiB**
+*   **Activations**: This is more complex. The formula from `answer.md` is `N(64BLD + 8BHL^2) + 4BLD + 8BLV`.
+    *   `N * (64*B*L*D + 8*B*H*L^2) = 4 * (64*32*256*512 + 8*32*16*256^2) = 4 * (268,435,456 + 268,435,456) = 2,147,483,648` bytes
+    *   `4*B*L*D = 4 * 32 * 256 * 512 = 16,777,216` bytes
+    *   `8*B*L*V = 8 * 32 * 256 * 10000 = 655,360,000` bytes
+    *   **Total Activations**: `2,147,483,648 + 16,777,216 + 655,360,000 = 2,819,620,864 bytes =` **2.63 GiB**
+
+#### c. Total Peak Memory
+
+\[ \text{Total Memory} = (86.6 + 86.6 + 173.2) \text{ MiB} + 2.63 \text{ GiB} = 346.4 \text{ MiB} + 2.63 \text{ GiB} \approx \textbf{2.97 GiB} \]
+
+### 3. FLOPs Calculation
+
+FLOPs measure the number of floating-point operations required for one training step (forward pass, backward pass, and optimizer update).
+
+#### a. Forward Pass (FLOPs_fwd)
+
+*   **Per Transformer Block**:
+    *   **Self-Attention**: `8*B*L*D^2 + 4*B*L^2*D`
+        *   `8*32*256*512^2 + 4*32*256^2*512 = 17,179,869,184 + 4,294,967,296 = 21,474,836,480`
+    *   **Feed-Forward Network (SwiGLU)**: Here we use the formula `4*B*L*D*D_ff + 2*B*L*D_ff*D` which is more accurate for SwiGLU.
+        *   `4*32*256*512*1344 + 2*32*256*1344*512 = 22,548,578,304 + 11,274,289,152 = 33,822,867,456`
+    *   **Total per Block**: `21,474,836,480 + 33,822,867,456 = 55,297,703,936`
+*   **Total for N Blocks**: `N * (FLOPs per block)`
+    *   `4 * 55,297,703,936 = 221,190,815,744`
+*   **Final Output Projection**: `2 * B * L * D * V`
+    *   `2 * 32 * 256 * 512 * 10000 = 83,886,080,000`
+
+**Total Forward Pass FLOPs:**
+\[ \text{FLOPs}_{\text{fwd}} = 221,190,815,744 + 83,886,080,000 = 305,076,895,744 \approx \textbf{305.1 GFLOPs} \]
+
+#### b. Backward and Total FLOPs
+
+*   **Backward Pass FLOPs**: Typically estimated as twice the forward pass.
+    *   `2 * 305.1 GFLOPs =` **610.2 GFLOPs**
+*   **Optimizer FLOPs**: The optimizer step is negligible compared to the forward and backward passes, so we'll omit it for this high-level estimate, following the common practice of `FLOPs_total ≈ 3 * FLOPs_fwd`.
+
+**Total Training FLOPs (per step):**
+\[ \text{FLOPs}_{\text{total}} \approx 3 \times \text{FLOPs}_{\text{fwd}} = 3 \times 305.1 \text{ GFLOPs} = \textbf{915.3 GFLOPs} \]
