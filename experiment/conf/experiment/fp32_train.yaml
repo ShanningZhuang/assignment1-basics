@@ -1,0 +1,19 @@
+# @package _global_
+
+# FP32 Training Configuration
+# This configuration disables BF16 for standard precision training
+
+# Standard training parameters
+batch_size: 32
+use_bf16: false  # Disable BF16 mixed precision
+
+# Standard gradient clipping
+gradient_clip_norm: 1.0
+
+# Training iterations
+max_iterations: 40000
+
+# Standard logging
+log_freq: 100
+val_freq: 500
+save_freq: 1000

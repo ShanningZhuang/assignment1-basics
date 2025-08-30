@@ -23,6 +23,9 @@ device: cuda
 seed: 42
 gradient_clip_norm: 1.0
 
+# Mixed precision training
+use_bf16: true  # Enable BF16 for Tensor Core acceleration
+
 # Logging
 log_freq: 100
 val_freq: 500

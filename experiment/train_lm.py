@@ -23,7 +23,7 @@ def update_learning_rate(optimizer, lr_schedule, iteration, cfg):
     return new_lr
 
 
-def train_step(model, optimizer, lr_schedule, batch, iteration, cfg):
+def train_step(model, optimizer, lr_schedule, batch, iteration, cfg, scaler=None):
     """
     Perform one training step.
 
@@ -31,6 +31,7 @@ def train_step(model, optimizer, lr_schedule, batch, iteration, cfg):
         model: TransformerLM model
         optimizer: Optimizer (AdamW, SGD, etc.)
         batch: Tuple of (input_tokens, target_tokens)
+        scaler: GradScaler for mixed precision training
 
     Returns:
         loss: Training loss for this batch
@@ -43,32 +44,60 @@ def train_step(model, optimizer, lr_schedule, batch, iteration, cfg):
     # Zero gradients
     optimizer.zero_grad()
 
-    # Forward pass: get logits from model
-    logits = model(input_tokens)  # Shape: [batch_size, context_length, vocab_size]
+    # Forward pass with autocast for mixed precision if enabled
+    if cfg.get('use_bf16', False):
+        with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
+            # Forward pass: get logits from model
+            logits = model(input_tokens)  # Shape: [batch_size, context_length, vocab_size]
 
-    # Reshape for loss computation
-    # cross_entropy_loss expects: (batch_size * seq_len, vocab_size) and (batch_size * seq_len,)
-    batch_size, seq_len, vocab_size = logits.shape
+            # Reshape for loss computation
+            # cross_entropy_loss expects: (batch_size * seq_len, vocab_size) and (batch_size * seq_len,)
+            batch_size, seq_len, vocab_size = logits.shape
 
-    # Flatten logits and targets
-    logits_flat = logits.view(
-        -1, vocab_size
-    )  # [batch_size * context_length, vocab_size]
-    targets_flat = target_tokens.view(-1)  # [batch_size * context_length]
+            # Flatten logits and targets
+            logits_flat = logits.view(
+                -1, vocab_size
+            )  # [batch_size * context_length, vocab_size]
+            targets_flat = target_tokens.view(-1)  # [batch_size * context_length]
 
-    # Compute loss
-    loss = cross_entropy_loss(logits_flat, targets_flat)
+            # Compute loss
+            loss = cross_entropy_loss(logits_flat, targets_flat)
+    else:
+        # Standard forward pass without mixed precision
+        logits = model(input_tokens)  # Shape: [batch_size, context_length, vocab_size]
 
-    # Backward pass
-    loss.backward()
+        # Reshape for loss computation
+        batch_size, seq_len, vocab_size = logits.shape
+        logits_flat = logits.view(-1, vocab_size)
+        targets_flat = target_tokens.view(-1)
 
-    # Optional: Gradient clipping (recommended for transformer training)
-    if hasattr(cfg, "gradient_clip_norm") and cfg.gradient_clip_norm > 0:
-        gradient_clipping(model.parameters(), cfg.gradient_clip_norm)
+        # Compute loss
+        loss = cross_entropy_loss(logits_flat, targets_flat)
 
-    # Optimizer step
-    update_learning_rate(optimizer, lr_schedule, iteration, cfg)
-    optimizer.step()
+    # Backward pass with gradient scaling if using mixed precision
+    if cfg.get('use_bf16', False) and scaler is not None:
+        scaler.scale(loss).backward()
+        
+        # Optional: Gradient clipping (recommended for transformer training)
+        if hasattr(cfg, "gradient_clip_norm") and cfg.gradient_clip_norm > 0:
+            scaler.unscale_(optimizer)
+            gradient_clipping(model.parameters(), cfg.gradient_clip_norm)
+        
+        # Optimizer step with scaling
+        update_learning_rate(optimizer, lr_schedule, iteration, cfg)
+        scaler.step(optimizer)
+        scaler.update()
+    else:
+        # Standard backward pass
+        loss.backward()
+        
+        # Optional: Gradient clipping (recommended for transformer training)
+        if hasattr(cfg, "gradient_clip_norm") and cfg.gradient_clip_norm > 0:
+            gradient_clipping(model.parameters(), cfg.gradient_clip_norm)
+        
+        # Optimizer step
+        update_learning_rate(optimizer, lr_schedule, iteration, cfg)
+        optimizer.step()
 
     return loss
 
@@ -86,15 +115,26 @@ def validate(model, val_data, cfg):
             batch = get_batch(val_data, cfg.batch_size, cfg.context_length, cfg.device)
             input_tokens, target_tokens = batch
 
-            # Forward pass only
-            logits = model(input_tokens)
-
-            # Compute loss
-            batch_size, seq_len, vocab_size = logits.shape
-            logits_flat = logits.view(-1, vocab_size)
-            targets_flat = target_tokens.view(-1)
-
-            loss = cross_entropy_loss(logits_flat, targets_flat)
+            # Forward pass with autocast for mixed precision if enabled
+            if cfg.get('use_bf16', False):
+                with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
+                    logits = model(input_tokens)
+                    
+                    # Compute loss
+                    batch_size, seq_len, vocab_size = logits.shape
+                    logits_flat = logits.view(-1, vocab_size)
+                    targets_flat = target_tokens.view(-1)
+                    loss = cross_entropy_loss(logits_flat, targets_flat)
+            else:
+                # Standard forward pass
+                logits = model(input_tokens)
+                
+                # Compute loss
+                batch_size, seq_len, vocab_size = logits.shape
+                logits_flat = logits.view(-1, vocab_size)
+                targets_flat = target_tokens.view(-1)
+                loss = cross_entropy_loss(logits_flat, targets_flat)
+                
             total_loss += loss.item()
 
     return total_loss / num_batches
@@ -123,6 +163,7 @@ def train(cfg: DictConfig) -> None:
     print(f"Training for {cfg.max_iterations} iterations")
     print(f"Model has {cfg.model.d_model} dimensions")
     print(f"Learning rate: {cfg.optimizer.lr}")
+    print(f"Mixed precision (BF16): {'Enabled' if cfg.get('use_bf16', False) else 'Disabled'}")
 
     # Setup device
     cfg.device = cfg.device if torch.cuda.is_available() else "cpu"
@@ -136,10 +177,18 @@ def train(cfg: DictConfig) -> None:
     # 4. MODEL AND OPTIMIZER SETUP
     # Initialize model using Hydra's instantiate
     model = hydra.utils.instantiate(cfg.model).to(cfg.device)
+    
+    # For BF16 training, ensure model parameters are in the right precision
+    # The model will automatically handle mixed precision during forward pass
+    if cfg.get('use_bf16', False):
+        print("BF16 mixed precision training enabled for Tensor Core acceleration")
 
     # Initialize optimizer
     optimizer = hydra.utils.instantiate(cfg.optimizer, params=model.parameters())
     lr_schedule = hydra.utils.instantiate(cfg.lr_schedule)
+
+    # Initialize gradient scaler for mixed precision training
+    scaler = torch.cuda.amp.GradScaler() if cfg.get('use_bf16', False) else None
 
     # Logging setup
     wandb.init(project=cfg.wandb_project, config=OmegaConf.to_container(cfg))
@@ -152,7 +201,7 @@ def train(cfg: DictConfig) -> None:
     for iteration in tqdm(range(cfg.max_iterations), desc="Training"):
         # Training step
         batch = get_batch(train_data, cfg.batch_size, cfg.context_length, cfg.device)
-        loss = train_step(model, optimizer, lr_schedule, batch, iteration, cfg).item()
+        loss = train_step(model, optimizer, lr_schedule, batch, iteration, cfg, scaler).item()
         train_losses.append(loss)
         # Logging
         if iteration % cfg.log_freq == 0:

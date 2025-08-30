@@ -1,0 +1,19 @@
+# @package _global_
+
+# BF16 Mixed Precision Training Configuration
+# This configuration enables BF16 for Tensor Core acceleration
+
+# Training parameters optimized for BF16
+batch_size: 32  # Can often increase batch size with BF16
+use_bf16: true  # Enable BF16 mixed precision
+
+# Gradient clipping is important for stability with mixed precision
+gradient_clip_norm: 1.0
+
+# Training iterations
+max_iterations: 40000
+
+# Logging - might want to log more frequently to monitor stability
+log_freq: 100
+val_freq: 500
+save_freq: 1000
