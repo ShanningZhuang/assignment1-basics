@@ -163,6 +163,7 @@ cython_debug/
 *.zip
 
 data/
+!experiment/conf/data
 .vscode/
 .cursor/
 outputs/

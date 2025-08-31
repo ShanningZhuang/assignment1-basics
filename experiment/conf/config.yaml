@@ -1,10 +1,10 @@
 # @package _global_
 defaults:
+  - _self_
   - model: small
   - optimizer: adamw  
   - data: tinystories
   - experiment: full_train.yaml
-  - _self_
 
 
 # Learning rate schedule

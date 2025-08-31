@@ -1,0 +1,3 @@
+# @package data
+train_file: "ts_train.npy"
+val_file: "ts_valid.npy"
