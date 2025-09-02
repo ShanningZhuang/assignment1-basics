@@ -103,7 +103,7 @@ class TransformerLM(nn.Module):
             Float[Tensor, "batch_size sequence_length vocab_size"]: Tensor with the predicted unnormalized
             next-word distribution for each token.
         """
-        x = self.input_embedding(in_indices)
+        x = self.input_embedding(in_indices) # batch_size, sequence_length, embedding_dim
         x = self.transformer(x)
         x = self.rms_norm(x)
         x = self.output_embedding(x)

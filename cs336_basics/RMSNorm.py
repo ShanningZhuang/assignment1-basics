@@ -32,8 +32,8 @@ class RMSNorm(nn.Module):
         in_dtype = x.dtype
         x = x.to(torch.float32)
 
-        RMS = torch.sqrt(torch.mean(torch.square(x), dim=-1, keepdim=True) + self.eps)
-        result = einsum(x, self.gain, "... d_model, d_model -> ... d_model") / RMS
+        RMS = torch.sqrt(torch.mean(torch.square(x), dim=-1, keepdim=True) + self.eps) # batch_size, sequence_length, 1
+        result = einsum(x, self.gain, "... d_model, d_model -> ... d_model") / RMS # batch_size, sequence_length, d_model
 
         # Return the result in the original dtype
         return result.to(in_dtype)

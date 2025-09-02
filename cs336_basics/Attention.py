@@ -117,7 +117,7 @@ class MultiheadSelfAttention(nn.Module):
             queries,
             "... sequence_length (h d_q) -> ... h sequence_length d_q",
             h=self.num_heads,
-        )
+        ) # ... h sequence_length d_q
         keys = rearrange(
             keys,
             "... sequence_length (h d_q) -> ... h sequence_length d_q",
@@ -135,7 +135,6 @@ class MultiheadSelfAttention(nn.Module):
                 ).view(
                     1, -1
                 )  # 1 sequence_length
-            token_positions.unsqueeze(-2)
             queries = self.rope(queries, token_positions)
             keys = self.rope(keys, token_positions)
         seq_len = in_features.shape[-2]

@@ -967,3 +967,23 @@ FLOPs measure the number of floating-point operations required for one training 
 
 **Total Training FLOPs (per step):**
 \[ \text{FLOPs}_{\text{total}} \approx 3 \times \text{FLOPs}_{\text{fwd}} = 3 \times 305.1 \text{ GFLOPs} = \textbf{915.3 GFLOPs} \]
+
+## Experiment 
+
+The learning rate is one of the most important hyperparameters to tune. Taking the base model
+you’ve trained, answer the following questions:
+(a) Perform a hyperparameter sweep over the learning rates and report the final losses (or note
+divergence if the optimizer diverges).
+Deliverable: Learning curves associated with multiple learning rates. Explain your hyperpa-
+rameter search strategy.
+Deliverable: A model with validation loss (per-token) on TinyStories of at most 1.45
+41
+
+https://wandb.ai/shanningzhuang-tsinghua-university/cs336-lr-sweep?nw=nwusershanningzhuang
+
+(b) Folk wisdom is that the best learning rate is “at the edge of stability.” Investigate how the point
+at which learning rates diverge is related to your best learning rate.
+Deliverable: Learning curves of increasing learning rate which include at least one divergent
+run and an analysis of how this relates to convergence rates.
+
+0.03 diverge, 0.01 good

@@ -1,0 +1,39 @@
+# @package _global_
+
+# Inherit from the base config
+defaults:
+  - config  # This inherits from config.yaml
+  - override hydra/sweeper: optuna
+  - _self_  # This config takes priority over inherited values
+
+# Override only the parameters you want to change for Optuna
+hydra:
+  mode: MULTIRUN
+  sweeper:
+    # Sampler (optimization algorithm)
+    sampler:
+      _target_: optuna.samplers.TPESampler
+      seed: 42
+      n_startup_trials: 10
+    _target_: hydra_plugins.hydra_optuna_sweeper.optuna_sweeper.OptunaSweeper
+    
+    # Optimization direction
+    direction: minimize
+    
+    # Study configuration
+    study_name: cs336_lr_optimization
+    storage: null
+    
+    # Optimization parameters
+    n_trials: 50
+    n_jobs: 1
+    
+    # Define the search space
+    params:
+      optimizer.lr: log-uniform(1e-6, 1e-1)
+    
+
+# Override specific parameters for optimization
+max_iterations: 15000  # Shorter runs for hyperparameter search
+wandb_project: "cs336-optuna-lr-optimization"
+wandb_name: "optuna-${hydra:job.num}"  # Unique name for each trial

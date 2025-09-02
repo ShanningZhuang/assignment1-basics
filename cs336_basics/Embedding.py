@@ -39,4 +39,5 @@ class Embedding(nn.Module):
         """
         # TODO: select the embedding vector for each token ID
         #       by indexing into the embedding matrix
-        return self.embedding[token_ids]
+        embedding = self.embedding[token_ids] # batch_size, sequence_length, embedding_dim
+        return embedding
