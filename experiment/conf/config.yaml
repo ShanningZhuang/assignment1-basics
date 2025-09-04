@@ -15,9 +15,10 @@ lr_schedule:
   Tc: ${eval:"int(${max_iterations} * 0.9)"}
 
 # Training parameters
-max_iterations: 40000
+total_tokens: 327680000
 batch_size: 32
 context_length: ${model.context_length}
+max_iterations: ${eval:"int(${total_tokens} / ${batch_size} / ${context_length})"}
 device: cuda
 seed: 42
 gradient_clip_norm: 1.0
@@ -30,7 +31,7 @@ log_freq: 100
 val_freq: 500
 save_freq: 1000
 wandb_project: "cs336-language-model"
-wandb_name: "base-model-${optimizer.lr}"
+wandb_name: "base-model-${optimizer.lr}-${batch_size}"
 val_batches: 10
 
 # Paths

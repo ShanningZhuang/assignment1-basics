@@ -1,6 +1,6 @@
 # 1. IMPORTS AND SETUP
 import hydra
-import torch, numpy as np, os, time, logging
+import torch, numpy as np, os, time, logging, random
 from hydra import compose, initialize
 from omegaconf import DictConfig, OmegaConf
 from pathlib import Path
@@ -12,6 +12,19 @@ from tqdm import tqdm
 import wandb
 
 OmegaConf.register_new_resolver("eval", eval)
+
+
+def set_seed(seed):
+    """Set seed for reproducibility across all random number generators."""
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)  # For multi-GPU setups
+    
+    # Make CuDNN deterministic (may reduce performance)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
 def update_learning_rate(optimizer, lr_schedule, iteration, cfg):
     """Update learning rate based on schedule."""
@@ -139,6 +152,9 @@ def log_metrics(metrics_dict):
 @hydra.main(version_base=None, config_path="conf", config_name="config")
 def train(cfg: DictConfig) -> float:  # Change: return float instead of None
     """Main training function with Hydra configuration."""
+        # Set seed for reproducibility
+    set_seed(cfg.seed)
+    print(f"Seed set to: {cfg.seed}")
     # 2. LOAD CONFIG
     # Print the full config
     print("Configuration:")
@@ -157,8 +173,8 @@ def train(cfg: DictConfig) -> float:  # Change: return float instead of None
     # 3. DATA LOADING
     # Setup data paths
     data_dir = Path(cfg.data_dir)
-    train_data = np.memmap(data_dir / cfg.data.train_file, dtype=np.uint16, mode="r")
-    val_data = np.memmap(data_dir / cfg.data.val_file, dtype=np.uint16, mode="r")
+    train_data = np.load(data_dir / cfg.data.train_file, mmap_mode="r")
+    val_data = np.load(data_dir / cfg.data.val_file, mmap_mode="r")
 
     # 4. MODEL AND OPTIMIZER SETUP
     # Initialize model using Hydra's instantiate
@@ -218,7 +234,7 @@ def train(cfg: DictConfig) -> float:  # Change: return float instead of None
             log_metrics(val_log_dict)
 
         # Checkpointing
-        if iteration % cfg.save_freq == 0:
+        if cfg.save_freq!=0 and iteration % cfg.save_freq == 0:
             checkpoint_dir = (
                 hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
             )

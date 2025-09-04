@@ -37,7 +37,6 @@ class Embedding(nn.Module):
         Returns:
             torch.Tensor of shape (batch_size, sequence_length, embedding_dim)
         """
-        # TODO: select the embedding vector for each token ID
-        #       by indexing into the embedding matrix
+        # Select the embedding vector for each token ID by indexing into the embedding matrix
         embedding = self.embedding[token_ids] # batch_size, sequence_length, embedding_dim
         return embedding

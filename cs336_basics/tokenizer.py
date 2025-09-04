@@ -129,7 +129,15 @@ class Tokenizer:
 
         for chunk in special_chunks:
             if special_tokens is not None and chunk in special_tokens:
-                encoded_tokens.append(vocab_inv[chunk.encode("utf-8")])
+                token = vocab_inv[chunk.encode("utf-8")]
+                if token>len(vocab):
+                    print(chunk)
+                    print(vocab_inv)
+                    print(vocab)
+                    print(token)
+                    print(len(vocab))
+                    raise ValueError("Token is out of range")
+                encoded_tokens.append(token)
             else:
                 # Use PAT to iteratively handle the chunk (Pre-tokenize)
                 for match in re.finditer(PAT, chunk):
@@ -164,7 +172,15 @@ class Tokenizer:
                                 can_merge = True
                                 break
                     for token_bytes in word_bytes:
-                        encoded_tokens.append(vocab_inv[token_bytes])
+                        token = vocab_inv[token_bytes]
+                        if token > len(vocab):
+                            print(token_bytes)
+                            print(vocab_inv)
+                            print(vocab)
+                            print(token)
+                            print(len(vocab))
+                            raise ValueError("Token is out of range")
+                        encoded_tokens.append(token)
         return encoded_tokens
 
     def encode_iterable(self, iterable) -> Any:

@@ -24,7 +24,23 @@ def main():
 
     special_tokens = ["<|endoftext|>"]
 
-    # Load tokenizers
+    # Check if we should skip to encoding
+    if len(sys.argv) > 1 and sys.argv[1] == "encode":
+        # Load only the tokenizers we need for encoding
+        print("Loading tokenizers for encoding...")
+        ts_tokenizer = Tokenizer.from_files(
+            str(ts_vocab_path), str(ts_merges_path), special_tokens=special_tokens
+        )
+        owt_tokenizer = Tokenizer.from_files(
+            str(owt_vocab_path), str(owt_merges_path), special_tokens=special_tokens
+        )
+        print("Tokenizers loaded.")
+        
+        # Jump directly to encoding
+        encode_datasets(ts_tokenizer, owt_tokenizer, data_dir)
+        return
+
+    # Load tokenizers for analysis
     print("Loading tokenizers...")
     ts_tokenizer = Tokenizer.from_files(
         str(ts_vocab_path), str(ts_merges_path), special_tokens=special_tokens
@@ -113,30 +129,37 @@ def main():
         "The TinyStories vocabulary size is ~10K and OpenWebText is 32K. A uint16 can store integers from 0 to 65,535. This range is sufficient to represent all token IDs for both vocabularies. Using uint16 is memory-efficient compared to larger types like uint32, saving significant disk space and potentially speeding up data loading during model training."
     )
 
-    def encode_dataset(tokenizer, in_path, out_path):
-        print(f"Encoding {in_path} to {out_path}...")
-        with open(in_path, "r", encoding="utf-8") as f:
-            text = f.read()
+def encode_dataset(tokenizer, in_path, out_path):
+    """Encode a text file using the given tokenizer and save as numpy array."""
+    print(f"Encoding {in_path} to {out_path}...")
+    with open(in_path, "r", encoding="utf-8") as f:
+        text = f.read()
 
-        token_ids = tokenizer.encode(text)
-        np.save(out_path, np.array(token_ids, dtype=np.uint16))
-        print("Encoding complete.")
+    token_ids = tokenizer.encode(text)
+    np.save(out_path, np.array(token_ids, dtype=np.uint16))
+    print("Encoding complete.")
 
-    # This part is optional as it can be time-consuming.
-    # To run, pass 'encode' as a command-line argument.
-    if len(sys.argv) > 1 and sys.argv[1] == "encode":
-        ts_train_out = data_dir / "ts_train.npy"
-        ts_valid_out = data_dir / "ts_valid.npy"
-        owt_train_out = data_dir / "owt_train.npy"
-        owt_valid_out = data_dir / "owt_valid.npy"
 
-        ts_valid_path = data_dir / "TinyStoriesV2-GPT4-valid.txt"
-        owt_valid_path = data_dir / "owt_valid.txt"
+def encode_datasets(ts_tokenizer, owt_tokenizer, data_dir):
+    """Encode all datasets using the appropriate tokenizers."""
+    ts_train_out = data_dir / "ts_train.npy"
+    ts_valid_out = data_dir / "ts_valid.npy"
+    owt_train_out = data_dir / "owt_train.npy"
+    owt_valid_out = data_dir / "owt_valid.npy"
 
-        encode_dataset(ts_tokenizer, ts_train_path, ts_train_out)
-        encode_dataset(ts_tokenizer, ts_valid_path, ts_valid_out)
-        encode_dataset(owt_tokenizer, owt_train_path, owt_train_out)
-        encode_dataset(owt_tokenizer, owt_valid_path, owt_valid_out)
+    ts_train_path = data_dir / "TinyStoriesV2-GPT4-train.txt"
+    ts_valid_path = data_dir / "TinyStoriesV2-GPT4-valid.txt"
+    owt_train_path = data_dir / "owt_train.txt"
+    owt_valid_path = data_dir / "owt_valid.txt"
+
+    print("=== Encoding TinyStories datasets ===")
+    encode_dataset(ts_tokenizer, ts_train_path, ts_train_out)
+    encode_dataset(ts_tokenizer, ts_valid_path, ts_valid_out)
+    
+    # Uncomment the following lines if you want to re-encode OpenWebText datasets
+    # print("\n=== Encoding OpenWebText datasets ===")
+    # encode_dataset(owt_tokenizer, owt_train_path, owt_train_out)
+    # encode_dataset(owt_tokenizer, owt_valid_path, owt_valid_out)
 
 
 if __name__ == "__main__":
