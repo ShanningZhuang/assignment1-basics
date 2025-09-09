@@ -1,0 +1,14 @@
+# @package _global_
+# Experiment configuration for layer normalization ablation study
+defaults:
+  - override /model: small_no_norm  # Use no-norm model by default
+
+# Reduced token count for ablation study (adjust as needed)
+total_tokens: 81920000  # ~1/5 of full training for faster ablation
+
+# Specific settings for layer norm ablation
+wandb_name: "ablation-layer-norm-${model.norm_type}-lr${optimizer.lr}"
+wandb_project: "cs336-ablations"
+
+# Layer norm ablation often requires lower learning rates for stability
+# You can override from command line: optimizer.lr=1e-5

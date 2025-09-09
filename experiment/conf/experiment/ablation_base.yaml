@@ -1,0 +1,2 @@
+# @package _global_
+total_tokens: 81920000  # ~1/5 of full training for faster ablation

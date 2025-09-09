@@ -1,0 +1,10 @@
+# @package _global_
+# Experiment configuration for pre-norm vs post-norm ablation study
+defaults:
+  - override /model: small_post_norm  # Use post-norm model by default
+
+# Reduced token count for ablation study
+total_tokens: 81920000  # ~1/5 of full training for faster ablation
+
+wandb_name: "ablation-pre-post-norm"
+wandb_project: "cs336-ablations"

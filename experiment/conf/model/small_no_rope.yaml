@@ -1,0 +1,14 @@
+# @package model
+# Model configuration for position embedding ablation study
+# Removes rotary position embeddings (NoPE) to test their importance
+_target_: cs336_basics.Transformer.TransformerLM
+vocab_size: 10000
+d_model: 512
+num_heads: 16
+d_ff: 1344
+num_layers: 4
+context_length: 256
+rope_theta: 10000.0
+norm_type: "rmsnorm"
+use_rope: false  # Remove position embeddings entirely
+ffn_type: "swiglu"

@@ -1,0 +1,11 @@
+# @package model
+# Model configuration for pre-norm vs post-norm ablation study
+# Uses post-norm transformer (original attention is all you need architecture)
+_target_: cs336_basics.Transformer.TransformerLMPostNorm
+vocab_size: 10000
+d_model: 512
+num_heads: 16
+d_ff: 1344
+num_layers: 4
+context_length: 256
+rope_theta: 10000.0

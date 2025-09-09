@@ -968,7 +968,7 @@ FLOPs measure the number of floating-point operations required for one training 
 **Total Training FLOPs (per step):**
 \[ \text{FLOPs}_{\text{total}} \approx 3 \times \text{FLOPs}_{\text{fwd}} = 3 \times 305.1 \text{ GFLOPs} = \textbf{915.3 GFLOPs} \]
 
-## Experiment 
+## LR Experiment 
 
 The learning rate is one of the most important hyperparameters to tune. Taking the base model
 you’ve trained, answer the following questions:
@@ -987,6 +987,10 @@ Deliverable: Learning curves of increasing learning rate which include at least 
 run and an analysis of how this relates to convergence rates.
 
 0.03 diverge, 0.01 good 0.003 Best
+
+##  Abalation Experiment
+
+uv run python experiment/train_lm.py -m experiment=full_train,ablation_layer_norm,ablation_pre_post_norm,ablation_position_emb,ablation_feedforward
 
 ## Main Experiment (OWT)
 

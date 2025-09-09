@@ -1,0 +1,14 @@
+# @package model
+# Model configuration for SwiGLU vs SiLU ablation study
+# Uses SiLU-only feedforward network instead of SwiGLU
+_target_: cs336_basics.Transformer.TransformerLM
+vocab_size: 10000
+d_model: 512
+num_heads: 16
+d_ff: 2048  # 4 * d_model to match parameter count (SiLU has 2 matrices vs SwiGLU's 3)
+num_layers: 4
+context_length: 256
+rope_theta: 10000.0
+norm_type: "rmsnorm"
+use_rope: true
+ffn_type: "silu"  # Use SiLU activation without gating
