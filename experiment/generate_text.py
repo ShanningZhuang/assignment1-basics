@@ -4,6 +4,19 @@ Text generation script using trained language model.
 
 This script loads a trained checkpoint and generates text using various sampling strategies
 including temperature scaling and nucleus (top-p) sampling.
+
+Supports multiple datasets with automatic configuration selection:
+- TinyStories: Children's stories dataset (vocab_size=10000, simple vocabulary)
+- OpenWebText: Web text dataset (vocab_size=32000, complex vocabulary)
+
+The script automatically:
+- Selects the correct Hydra configuration (model + data configs)
+- Loads the appropriate tokenizer files
+- Validates vocabulary size consistency
+
+Usage:
+    python generate_text.py --dataset tinystories
+    python generate_text.py --dataset openwebtext --model_path /path/to/checkpoint.pt
 """
 
 import sys
@@ -23,13 +36,14 @@ from cs336_basics.generation import generate_text
 from cs336_basics.checkpoint import load_checkpoint
 
 
-def load_trained_model(checkpoint_path: str, config_path: str = None):
+def load_trained_model(checkpoint_path: str, config_path: str = None, dataset: str = "tinystories"):
     """
     Load a trained model from checkpoint.
     
     Args:
         checkpoint_path: Path to the checkpoint file
         config_path: Path to the config file (optional, will use default if not provided)
+        dataset: Dataset type ('tinystories' or 'openwebtext') to determine tokenizer files
     
     Returns:
         model: Loaded model
@@ -40,8 +54,26 @@ def load_trained_model(checkpoint_path: str, config_path: str = None):
     if config_path is None:
         config_path = project_root / "experiment" / "conf"
     
+    # Create dataset-specific configuration overrides
+    config_overrides = []
+    if dataset.lower() == "tinystories":
+        config_overrides = [
+            "model=tinystories",
+            "data=tinystories"
+        ]
+    elif dataset.lower() == "openwebtext":
+        config_overrides = [
+            "model=openwebtext", 
+            "data=openwebtext"
+        ]
+    
     with hydra.initialize_config_dir(config_dir=str(config_path), version_base=None):
-        cfg = hydra.compose(config_name="config")
+        cfg = hydra.compose(config_name="config", overrides=config_overrides)
+    
+    print(f"Using configuration for dataset: {dataset}")
+    print(f"Model vocab size: {cfg.model.vocab_size}")
+    print(f"Model config: {cfg.model}")
+    print(f"Data config: {cfg.data}")
     
     # Setup device
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -57,13 +89,45 @@ def load_trained_model(checkpoint_path: str, config_path: str = None):
     iteration = load_checkpoint(checkpoint_path, model, optimizer)
     print(f"Loaded checkpoint from iteration {iteration}")
     
-    # Load tokenizer
+    # Load tokenizer based on dataset
     data_dir = project_root / "data"
+    
+    # Determine tokenizer files based on dataset
+    if dataset.lower() == "tinystories":
+        vocab_file = data_dir / "TinyStoriesV2-GPT4-train-vocab.json"
+        merges_file = data_dir / "TinyStoriesV2-GPT4-train-merges.txt"
+    elif dataset.lower() == "openwebtext":
+        vocab_file = data_dir / "owt_train-vocab.json"
+        merges_file = data_dir / "owt_train-merges.txt"
+    else:
+        raise ValueError(f"Unsupported dataset: {dataset}. Supported datasets: 'tinystories', 'openwebtext'")
+    
+    # Check if tokenizer files exist
+    if not vocab_file.exists():
+        raise FileNotFoundError(f"Vocabulary file not found: {vocab_file}")
+    if not merges_file.exists():
+        raise FileNotFoundError(f"Merges file not found: {merges_file}")
+    
     tokenizer = Tokenizer.from_files(
-        str(data_dir / "TinyStoriesV2-GPT4-train-vocab.json"),
-        str(data_dir / "TinyStoriesV2-GPT4-train-merges.txt"),
+        str(vocab_file),
+        str(merges_file),
         special_tokens=["<|endoftext|>"]
     )
+    
+    # Verify tokenizer vocab size matches model vocab size
+    tokenizer_vocab_size = len(tokenizer.vocab)
+    model_vocab_size = cfg.model.vocab_size
+    
+    print(f"Tokenizer vocab size: {tokenizer_vocab_size}")
+    print(f"Model vocab size: {model_vocab_size}")
+    
+    if tokenizer_vocab_size != model_vocab_size:
+        print(f"WARNING: Vocabulary size mismatch!")
+        print(f"  Tokenizer: {tokenizer_vocab_size}")
+        print(f"  Model: {model_vocab_size}")
+        print(f"  This may cause issues during generation.")
+    else:
+        print("✓ Vocabulary sizes match")
     
     return model, tokenizer, cfg
 
@@ -121,17 +185,30 @@ def generate_sample_text(model, tokenizer, cfg, prompt="Once upon a time", **gen
     return generated_text, input_length, output_length
 
 
-def run_examples(model, tokenizer, cfg):
+def run_examples(model, tokenizer, cfg, dataset="tinystories"):
     """Run example generations with different sampling strategies."""
     
     print("\n" + "="*80)
     print("EXAMPLE GENERATIONS WITH DIFFERENT SAMPLING STRATEGIES")
     print("="*80)
-    # Test prompts
-    prompts = [
-        "Once upon a time",
-        "The little girl"
-    ]
+    
+    # Test prompts based on dataset
+    if dataset.lower() == "tinystories":
+        prompts = [
+            "Once upon a time",
+            "The little girl"
+        ]
+    elif dataset.lower() == "openwebtext":
+        prompts = [
+            "The future of artificial intelligence",
+            "In recent years, technology has"
+        ]
+    else:
+        # Default prompts
+        prompts = [
+            "Once upon a time",
+            "The little girl"
+        ]
     
     # Generate text with different sampling strategies
     sampling_configs = [
@@ -193,7 +270,7 @@ def run_examples(model, tokenizer, cfg):
             print("\n" + "-"*40)
 
 
-def interactive_generation(model, tokenizer, cfg, args):
+def interactive_generation(model, tokenizer, cfg, args, dataset="tinystories"):
     """Interactive text generation with user input."""
     
     print(f"\n{'='*80}")
@@ -310,7 +387,7 @@ def interactive_generation(model, tokenizer, cfg, args):
                 print("Invalid choice.")
                 
         elif choice == "3":
-            run_examples(model, tokenizer, cfg)
+            run_examples(model, tokenizer, cfg, dataset)
             
         elif choice == "4":
             print("Goodbye!")
@@ -323,8 +400,27 @@ def interactive_generation(model, tokenizer, cfg, args):
 def main():
     """Main function with argument parsing and interactive generation."""
     
-    parser = argparse.ArgumentParser(description="Text generation with trained language model")
+    parser = argparse.ArgumentParser(
+        description="Text generation with trained language model",
+        epilog="""
+Examples:
+  # Use TinyStories model with default checkpoint
+  python generate_text.py --dataset tinystories
+  
+  # Use OpenWebText model with custom checkpoint
+  python generate_text.py --dataset openwebtext --model_path /path/to/owt_checkpoint.pt
+  
+  # Run only examples without interactive mode
+  python generate_text.py --dataset tinystories --examples_only
+  
+  # Use greedy decoding instead of sampling
+  python generate_text.py --dataset openwebtext --greedy
+        """,
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("--model_path", type=str, help="Path to model checkpoint")
+    parser.add_argument("--dataset", type=str, default="tinystories", choices=["tinystories", "openwebtext"], 
+                        help="Dataset type for tokenizer selection (default: tinystories)")
     parser.add_argument("--max_tokens", type=int, default=100, help="Maximum new tokens to generate (default: 100)")
     parser.add_argument("--temperature", type=float, default=0.8, help="Temperature for sampling (default: 0.8)")
     parser.add_argument("--top_p", type=float, default=0.9, help="Top-p for nucleus sampling (default: 0.9, set to 0 to disable)")
@@ -342,13 +438,31 @@ def main():
     if args.model_path:
         checkpoint_path = Path(args.model_path)
     else:
-        # Use default paths
-        checkpoint_path = project_root / "outputs" / "2025-08-30" / "12-32-33" / "checkpoint_39000.pt"
-        if not checkpoint_path.exists():
-            checkpoint_path = project_root / "outputs" / "2025-09-01" / "23-40-49" / "checkpoint_11000.pt"
-        if not checkpoint_path.exists():
-            print("No trained checkpoint found. Please specify --model_path or train a model first.")
-            print("Example usage: python generate_text.py --model_path /path/to/checkpoint.pt")
+        # Use default paths - try to find recent checkpoints
+        outputs_dir = project_root / "outputs"
+        checkpoint_path = None
+        
+        # Look for checkpoints in recent output directories
+        if outputs_dir.exists():
+            # Get most recent directories
+            output_dirs = sorted([d for d in outputs_dir.iterdir() if d.is_dir()], reverse=True)
+            for output_dir in output_dirs:
+                # Look for subdirectories (timestamp directories)
+                timestamp_dirs = sorted([d for d in output_dir.iterdir() if d.is_dir()], reverse=True)
+                for timestamp_dir in timestamp_dirs:
+                    # Look for checkpoint files
+                    checkpoints = list(timestamp_dir.glob("checkpoint_*.pt"))
+                    if checkpoints:
+                        # Use the highest numbered checkpoint
+                        checkpoint_path = sorted(checkpoints, key=lambda x: int(x.stem.split('_')[1]))[-1]
+                        break
+                if checkpoint_path:
+                    break
+        
+        if not checkpoint_path or not checkpoint_path.exists():
+            print(f"No trained checkpoint found for dataset '{args.dataset}'.")
+            print("Please specify --model_path or train a model first.")
+            print(f"Example usage: python generate_text.py --dataset {args.dataset} --model_path /path/to/checkpoint.pt")
             return
     
     if not checkpoint_path.exists():
@@ -358,15 +472,15 @@ def main():
     print(f"Using checkpoint: {checkpoint_path}")
     
     # Load model and tokenizer
-    print("Loading model and tokenizer...")
-    model, tokenizer, cfg = load_trained_model(str(checkpoint_path))
+    print(f"Loading model and tokenizer for dataset: {args.dataset}")
+    model, tokenizer, cfg = load_trained_model(str(checkpoint_path), dataset=args.dataset)
     print("Model loaded successfully!")
     
     # Run examples if requested or start interactive mode
     if args.examples_only:
-        run_examples(model, tokenizer, cfg)
+        run_examples(model, tokenizer, cfg, args.dataset)
     else:
-        interactive_generation(model, tokenizer, cfg, args)
+        interactive_generation(model, tokenizer, cfg, args, args.dataset)
 
 
 if __name__ == "__main__":

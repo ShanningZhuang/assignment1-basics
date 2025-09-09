@@ -1,0 +1,3 @@
+# @package data
+train_file: "owt_train.npy"
+val_file: "owt_valid.npy"

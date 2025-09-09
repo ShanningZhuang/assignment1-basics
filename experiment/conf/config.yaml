@@ -16,7 +16,7 @@ lr_schedule:
 
 # Training parameters
 total_tokens: 327680000
-batch_size: 32
+batch_size: 128
 context_length: ${model.context_length}
 max_iterations: ${eval:"int(${total_tokens} / ${batch_size} / ${context_length})"}
 device: cuda

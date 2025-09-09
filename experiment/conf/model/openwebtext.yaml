@@ -1,0 +1,9 @@
+# @package model
+_target_: cs336_basics.Transformer.TransformerLM
+vocab_size: 32000
+d_model: 512
+num_heads: 16
+d_ff: 1344
+num_layers: 4
+context_length: 256
+rope_theta: 10000.0
