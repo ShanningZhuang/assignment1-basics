@@ -992,6 +992,14 @@ run and an analysis of how this relates to convergence rates.
 
 uv run python experiment/train_lm.py -m experiment=full_train,ablation_layer_norm,ablation_pre_post_norm,ablation_position_emb,ablation_feedforward
 
+uv run python experiment/train_lm.py -m experiment=ablation_layer_norm optimizer.lr=0.00003,0.0001,0.0003,0.001
+
+![ablation result](image/answer/ablation.png)
+![no_norm_result](image/answer/no_norm.png)
+no_norm make training more stable so that we could use a bigger learning rate. With normalization perform way more better than no norm.
+Others method also a little bit worse than the base model.
+
+
 ## Main Experiment (OWT)
 
 Based on your request, I will begin by analyzing the existing experiment setup to determine how to train the new model and answer your questions. I'll start by reading the main configuration file to understand the overall structure.

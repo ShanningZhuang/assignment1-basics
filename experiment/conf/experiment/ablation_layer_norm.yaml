@@ -11,4 +11,6 @@ wandb_name: "ablation-layer-norm-${model.norm_type}-lr${optimizer.lr}"
 wandb_project: "cs336-ablations"
 
 # Layer norm ablation often requires lower learning rates for stability
-# You can override from command line: optimizer.lr=1e-5
+# Override the learning rate directly in this config
+optimizer:
+  lr: 0.001  # Lower learning rate for stability in layer norm ablation
